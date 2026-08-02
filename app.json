@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Bamania's Scanner",
+    "slug": "bamanias-scanner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bamania.scanner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#7B2FBE",
+        "foregroundImage": "./assets/logo.png"
+      },
+      "package": "com.bamania.scanner",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/logo.png",
+      "name": "Bamania's Scanner",
+      "shortName": "BamScan",
+      "description": "Bamania's Scanner - Scan, enhance and export documents to PDF instantly"
+    }
+  }
+}
