@@ -1,0 +1,8 @@
+[build]
+  command = "npx expo export --platform web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_VERSION = "10"
+  EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK = "1"

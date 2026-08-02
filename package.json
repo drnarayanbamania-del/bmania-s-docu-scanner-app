@@ -1,5 +1,5 @@
 {
-  "name": "docscanner",
+  "name": "bamanias-scanner",
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
@@ -41,7 +41,11 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build": "expo export --platform web"
+  },
+  "overrides": {
+    "postcss": "8.4.49"
   },
   "private": true
 }
