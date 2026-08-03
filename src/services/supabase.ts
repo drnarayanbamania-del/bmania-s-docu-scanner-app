@@ -217,7 +217,17 @@ class SupabaseService {
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false });
-    return { projects: data, error: error ? new Error(error.message) : null };
+    const projects = data ? data.map((p: any) => ({
+      id: p.id,
+      userId: p.user_id,
+      title: p.title,
+      metadata: p.metadata || {},
+      pageCount: p.page_count ?? 0,
+      thumbnailUrl: p.thumbnail_url,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+    })) : null;
+    return { projects, error: error ? new Error(error.message) : null };
   }
 
   async getProject(projectId: string): Promise<{ project: unknown | null; error: Error | null }> {
@@ -232,7 +242,17 @@ class SupabaseService {
       .select('*')
       .eq('id', projectId)
       .single();
-    return { project: data, error: error ? new Error(error.message) : null };
+    const project = data ? {
+      id: data.id,
+      userId: data.user_id,
+      title: data.title,
+      metadata: data.metadata || {},
+      pageCount: data.page_count ?? 0,
+      thumbnailUrl: data.thumbnail_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    } : null;
+    return { project, error: error ? new Error(error.message) : null };
   }
 
   async updateProject(projectId: string, updates: Record<string, unknown>): Promise<Error | null> {
@@ -295,10 +315,29 @@ class SupabaseService {
     const client = this.getClient();
     const { data, error } = await client
       .from('scanned_pages')
-      .insert({ project_id: projectId, ...pageData })
+      .insert({
+        project_id: projectId,
+        image_uri: pageData.imageUri,
+        original_uri: pageData.originalUri,
+        processed_uri: pageData.processedUri,
+        order: pageData.order ?? 0,
+        crop_points: pageData.cropPoints,
+        filters: pageData.filters,
+      })
       .select()
       .single();
-    return { page: data, error: error ? new Error(error.message) : null };
+    const page = data ? {
+      id: data.id,
+      projectId: data.project_id,
+      imageUri: data.image_uri,
+      originalUri: data.original_uri,
+      processedUri: data.processed_uri,
+      order: data.order,
+      cropPoints: data.crop_points,
+      filters: data.filters,
+      createdAt: data.created_at,
+    } : null;
+    return { page, error: error ? new Error(error.message) : null };
   }
 
   async getScannedPages(projectId: string): Promise<{ pages: unknown[] | null; error: Error | null }> {
@@ -314,7 +353,18 @@ class SupabaseService {
       .select('*')
       .eq('project_id', projectId)
       .order('order', { ascending: true });
-    return { pages: data, error: error ? new Error(error.message) : null };
+    const pages = data ? data.map((p: any) => ({
+      id: p.id,
+      projectId: p.project_id,
+      imageUri: p.image_uri,
+      originalUri: p.original_uri,
+      processedUri: p.processed_uri,
+      order: p.order,
+      cropPoints: p.crop_points,
+      filters: p.filters,
+      createdAt: p.created_at,
+    })) : null;
+    return { pages, error: error ? new Error(error.message) : null };
   }
 
   async updateScannedPage(pageId: string, updates: any): Promise<Error | null> {
