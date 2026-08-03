@@ -2,6 +2,7 @@ import { createClient, SupabaseClient, Session, User } from '@supabase/supabase-
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storage } from '../utils/storage';
+import { localFiles } from '../utils/localFiles';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
@@ -271,12 +272,10 @@ class SupabaseService {
   async deleteProject(projectId: string): Promise<Error | null> {
     if (this.isMock) {
       await storage.deleteProject(projectId);
-      const pagesStr = await AsyncStorage.getItem('@docscanner:scanned_pages');
-      if (pagesStr) {
-        const pages = JSON.parse(pagesStr);
-        const filtered = pages.filter((p: any) => p.projectId !== projectId);
-        await AsyncStorage.setItem('@docscanner:scanned_pages', JSON.stringify(filtered));
-      }
+      // Delete page metadata
+      await localFiles.deleteProjectPages(projectId);
+      // Delete all image files for this project
+      await localFiles.deleteProjectFiles(projectId);
       return null;
     }
     const client = this.getClient();
@@ -287,19 +286,31 @@ class SupabaseService {
   // Scanned Pages
   async createScannedPage(projectId: string, pageData: any): Promise<{ page: unknown | null; error: Error | null }> {
     if (this.isMock) {
-      const pagesStr = await AsyncStorage.getItem('@docscanner:scanned_pages');
-      const pages = pagesStr ? JSON.parse(pagesStr) : [];
+      const pageId = `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // ── Persist images to permanent local storage ──
+      const originalSrc = pageData.originalUri || pageData.imageUri;
+      const processedSrc = pageData.processedUri || pageData.imageUri;
+
+      const [permanentImageUri, permanentOriginalUri] = await Promise.all([
+        localFiles.saveScannedImage(projectId, pageId, processedSrc, 'page'),
+        localFiles.saveScannedImage(projectId, pageId, originalSrc, 'original'),
+      ]);
+
       const newPage = {
-        id: `page-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: pageId,
         projectId,
-        originalUri: pageData.originalUri || pageData.imageUri,
-        imageUri: pageData.imageUri,
-        processedUri: pageData.processedUri || pageData.imageUri,
+        originalUri: permanentOriginalUri,
+        imageUri: permanentImageUri,
+        processedUri: permanentImageUri,
         order: pageData.order || 0,
+        cropPoints: pageData.cropPoints || null,
+        filters: pageData.filters || null,
         createdAt: new Date().toISOString(),
       };
-      pages.push(newPage);
-      await AsyncStorage.setItem('@docscanner:scanned_pages', JSON.stringify(pages));
+
+      // Save metadata via LocalFileService (AsyncStorage)
+      await localFiles.savePage(newPage);
 
       // Increase page count in project
       const projects = await storage.getProjects();
@@ -342,10 +353,8 @@ class SupabaseService {
 
   async getScannedPages(projectId: string): Promise<{ pages: unknown[] | null; error: Error | null }> {
     if (this.isMock) {
-      const pagesStr = await AsyncStorage.getItem('@docscanner:scanned_pages');
-      const pages = pagesStr ? JSON.parse(pagesStr) : [];
-      const projectPages = pages.filter((p: any) => p.projectId === projectId).sort((a: any, b: any) => a.order - b.order);
-      return { pages: projectPages, error: null };
+      const pages = await localFiles.getPages(projectId);
+      return { pages, error: null };
     }
     const client = this.getClient();
     const { data, error } = await client
@@ -369,13 +378,7 @@ class SupabaseService {
 
   async updateScannedPage(pageId: string, updates: any): Promise<Error | null> {
     if (this.isMock) {
-      const pagesStr = await AsyncStorage.getItem('@docscanner:scanned_pages');
-      const pages = pagesStr ? JSON.parse(pagesStr) : [];
-      const idx = pages.findIndex((p: any) => p.id === pageId);
-      if (idx !== -1) {
-        pages[idx] = { ...pages[idx], ...updates };
-        await AsyncStorage.setItem('@docscanner:scanned_pages', JSON.stringify(pages));
-      }
+      await localFiles.updatePage(pageId, updates);
       return null;
     }
     const client = this.getClient();
@@ -385,13 +388,13 @@ class SupabaseService {
 
   async deleteScannedPage(pageId: string): Promise<Error | null> {
     if (this.isMock) {
-      const pagesStr = await AsyncStorage.getItem('@docscanner:scanned_pages');
-      const pages = pagesStr ? JSON.parse(pagesStr) : [];
+      const pages = await localFiles.getPages();
       const page = pages.find((p: any) => p.id === pageId);
       if (page) {
-        const filtered = pages.filter((p: any) => p.id !== pageId);
-        await AsyncStorage.setItem('@docscanner:scanned_pages', JSON.stringify(filtered));
-
+        // Delete physical image files
+        await localFiles.deletePageFiles(page.projectId, pageId);
+        // Delete metadata
+        await localFiles.deletePage(pageId);
         // Decrease page count in project
         const projects = await storage.getProjects();
         const idx = projects.findIndex((p: any) => p.id === page.projectId);
