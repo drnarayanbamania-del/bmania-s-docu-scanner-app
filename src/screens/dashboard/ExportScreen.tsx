@@ -577,10 +577,12 @@ const styles = StyleSheet.create({
   },
   formatGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Theme.spacing.sm,
   },
   formatCardBtn: {
     flex: 1,
+    minWidth: 100,
     borderWidth: 1,
     borderColor: Theme.colors.border.light,
     borderRadius: Theme.borderRadius.md,
@@ -619,10 +621,12 @@ const styles = StyleSheet.create({
   },
   optionsWrapper: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Theme.spacing.sm,
   },
   optionBtn: {
     flex: 1,
+    minWidth: 90,
     paddingVertical: Theme.spacing.sm,
     borderWidth: 1,
     borderColor: Theme.colors.border.light,
