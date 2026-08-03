@@ -645,14 +645,7 @@ export const DashboardScreen: React.FC = () => {
         <View style={styles.protectInfoBox}>
           <Ionicons name="information-circle" size={22} color={Theme.colors.ocean[500]} />
           <Text style={styles.protectInfoText}>
-            PDF encryption (AES) requires a server-side tool. Our current PDF library (pdf-lib) does not
-            support true password encryption in the browser.{'
-'}{'
-'}To protect your document, you can:{'
-'}
-            • Add a visible <Text style={{ fontWeight: 'bold' }}>CONFIDENTIAL</Text> watermark via Export screen{'
-'}
-            • Use a dedicated tool like Smallpdf or iLovePDF to encrypt after downloading
+            {'PDF encryption (AES) requires a server-side tool. pdf-lib does not support true password encryption in the browser.\n\nTo protect your document you can:\n\u2022 Add a CONFIDENTIAL watermark via the Export screen\n\u2022 Use Smallpdf or iLovePDF to encrypt after downloading'}
           </Text>
         </View>
 
