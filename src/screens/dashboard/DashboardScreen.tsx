@@ -1,5 +1,17 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, FlatList, TextInput, TouchableOpacity, Platform, useWindowDimensions, Image } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  Text,
+  ScrollView,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  Platform,
+  useWindowDimensions,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
 const LOGO = require('../../../assets/logo.png');
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,22 +27,49 @@ import { Project, ScannedPage } from '../../types';
 export const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, signOut } = useAuth();
-  const { projects, scannedPages, createProject, setCurrentProject, addScannedPages, deleteProject } = useApp();
+  const {
+    projects,
+    createProject,
+    setCurrentProject,
+    addScannedPages,
+    deleteProject,
+    loadScannedPages,
+  } = useApp();
   const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const { width: windowWidth } = useWindowDimensions();
 
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
-  // PDF Tool Modal States
+  // ---------------------------------------------------------------------------
+  // Merge modal states
+  // ---------------------------------------------------------------------------
   const [mergeModalVisible, setMergeModalVisible] = useState(false);
   const [selectedMergeProjIds, setSelectedMergeProjIds] = useState<string[]>([]);
   const [mergedDocTitle, setMergedDocTitle] = useState('');
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeLoadingProjId, setMergeLoadingProjId] = useState<string | null>(null);
 
+  // ---------------------------------------------------------------------------
+  // Split modal states
+  // ---------------------------------------------------------------------------
   const [splitModalVisible, setSplitModalVisible] = useState(false);
   const [selectedSplitProj, setSelectedSplitProj] = useState<Project | null>(null);
   const [selectedSplitPageIds, setSelectedSplitPageIds] = useState<string[]>([]);
+  const [isSplitting, setIsSplitting] = useState(false);
+  const [splitPagesLoading, setSplitPagesLoading] = useState(false);
 
+  // ---------------------------------------------------------------------------
+  // Protect PDF modal states
+  // ---------------------------------------------------------------------------
+  const [protectModalVisible, setProtectModalVisible] = useState(false);
+
+  // Per-project page cache (so we don't re-fetch on every re-render)
+  const [projectPagesCache, setProjectPagesCache] = useState<Record<string, any[]>>({});
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
   const filteredProjects = projects.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -49,91 +88,101 @@ export const DashboardScreen: React.FC = () => {
     navigation.navigate('ProjectDetail', { projectId: project.id });
   };
 
-  // Merge Documents logic
+  /** Load pages for a given project, using the cache. */
+  const ensureProjectPagesLoaded = useCallback(
+    async (projId: string): Promise<any[]> => {
+      if (projectPagesCache[projId]) return projectPagesCache[projId];
+      const pages = await loadScannedPages(projId);
+      setProjectPagesCache(prev => ({ ...prev, [projId]: pages }));
+      return pages;
+    },
+    [projectPagesCache, loadScannedPages]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Merge logic
+  // ---------------------------------------------------------------------------
+  const toggleMergeSelect = async (id: string) => {
+    const alreadySelected = selectedMergeProjIds.includes(id);
+    setSelectedMergeProjIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+    // Pre-load pages when user selects a project so merge is instant
+    if (!alreadySelected && !projectPagesCache[id]) {
+      setMergeLoadingProjId(id);
+      await ensureProjectPagesLoaded(id);
+      setMergeLoadingProjId(null);
+    }
+  };
+
   const handleMergeDocuments = async () => {
     if (selectedMergeProjIds.length < 2) {
       showToast('Select at least 2 documents to merge', 'error');
       return;
     }
 
-    const title = mergedDocTitle.trim() || `Merged Doc ${new Date().toLocaleDateString()}`;
-    const mergedProj = await createProject(title);
-    if (!mergedProj) {
-      showToast('Failed to create merged document', 'error');
-      return;
-    }
+    setIsMerging(true);
+    try {
+      const title =
+        mergedDocTitle.trim() || `Merged Doc ${new Date().toLocaleDateString()}`;
+      const mergedProj = await createProject(title);
+      if (!mergedProj) {
+        showToast('Failed to create merged document', 'error');
+        return;
+      }
 
-    // Accumulate all pages in selected order
-    const pagesToMerge: Omit<ScannedPage, 'id' | 'projectId' | 'createdAt'>[] = [];
-    selectedMergeProjIds.forEach(projId => {
-      const projPages = scannedPages
-        .filter(p => p.projectId === projId)
-        .sort((a, b) => a.order - b.order);
-      
-      projPages.forEach(p => {
-        pagesToMerge.push({
-          originalUri: p.originalUri,
-          imageUri: p.imageUri,
-          processedUri: p.processedUri,
-          order: pagesToMerge.length,
+      const pagesToMerge: Omit<ScannedPage, 'id' | 'projectId' | 'createdAt'>[] = [];
+
+      for (const projId of selectedMergeProjIds) {
+        // Fetch fresh from service if not yet in cache
+        const projPages = await ensureProjectPagesLoaded(projId);
+        const sorted = [...projPages].sort((a: any, b: any) => a.order - b.order);
+        sorted.forEach((p: any) => {
+          pagesToMerge.push({
+            originalUri: p.originalUri,
+            imageUri: p.imageUri,
+            processedUri: p.processedUri,
+            order: pagesToMerge.length,
+            filters: p.filters,
+            cropPoints: p.cropPoints,
+          });
         });
-      });
-    });
+      }
 
-    if (pagesToMerge.length === 0) {
-      showToast('Selected documents have no scanned pages', 'error');
-      // Cleanup empty project
-      await deleteProject(mergedProj.id);
-      return;
+      if (pagesToMerge.length === 0) {
+        showToast('Selected documents have no scanned pages', 'error');
+        await deleteProject(mergedProj.id);
+        return;
+      }
+
+      await addScannedPages(mergedProj.id, pagesToMerge);
+      showToast(
+        `Merged ${selectedMergeProjIds.length} documents — ${pagesToMerge.length} pages!`,
+        'success'
+      );
+      setMergeModalVisible(false);
+      setSelectedMergeProjIds([]);
+      setMergedDocTitle('');
+      handleSelectProject(mergedProj);
+    } catch (e) {
+      console.error(e);
+      showToast('Merge failed. Please try again.', 'error');
+    } finally {
+      setIsMerging(false);
     }
-
-    await addScannedPages(mergedProj.id, pagesToMerge);
-    showToast(`Merged ${selectedMergeProjIds.length} documents successfully!`, 'success');
-    setMergeModalVisible(false);
-    setSelectedMergeProjIds([]);
-    setMergedDocTitle('');
-    
-    // Open the new project
-    handleSelectProject(mergedProj);
   };
 
-  const toggleMergeSelect = (id: string) => {
-    setSelectedMergeProjIds(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  // Split Document logic
-  const handleSplitDocument = async () => {
-    if (!selectedSplitProj) return;
-    if (selectedSplitPageIds.length === 0) {
-      showToast('Select at least 1 page to extract', 'error');
-      return;
-    }
-
-    const title = `Split from ${selectedSplitProj.title}`;
-    const splitProj = await createProject(title);
-    if (!splitProj) {
-      showToast('Failed to create split document', 'error');
-      return;
-    }
-
-    const pagesToSplit = scannedPages
-      .filter(p => selectedSplitPageIds.includes(p.id))
-      .map((p, idx) => ({
-        originalUri: p.originalUri,
-        imageUri: p.imageUri,
-        processedUri: p.processedUri,
-        order: idx,
-      }));
-
-    await addScannedPages(splitProj.id, pagesToSplit);
-    showToast(`Extracted ${selectedSplitPageIds.length} pages into new document!`, 'success');
-    setSplitModalVisible(false);
-    setSelectedSplitProj(null);
+  // ---------------------------------------------------------------------------
+  // Split logic
+  // ---------------------------------------------------------------------------
+  const handleSelectSplitProject = async (proj: Project) => {
+    setSelectedSplitProj(proj);
     setSelectedSplitPageIds([]);
-
-    handleSelectProject(splitProj);
+    if (!projectPagesCache[proj.id]) {
+      setSplitPagesLoading(true);
+      await ensureProjectPagesLoaded(proj.id);
+      setSplitPagesLoading(false);
+    }
   };
 
   const toggleSplitPageSelect = (pageId: string) => {
@@ -142,6 +191,54 @@ export const DashboardScreen: React.FC = () => {
     );
   };
 
+  const handleSplitDocument = async () => {
+    if (!selectedSplitProj) return;
+    if (selectedSplitPageIds.length === 0) {
+      showToast('Select at least 1 page to extract', 'error');
+      return;
+    }
+
+    setIsSplitting(true);
+    try {
+      const title = `Split from ${selectedSplitProj.title}`;
+      const splitProj = await createProject(title);
+      if (!splitProj) {
+        showToast('Failed to create split document', 'error');
+        return;
+      }
+
+      const cachedPages = projectPagesCache[selectedSplitProj.id] || [];
+      const pagesToSplit = cachedPages
+        .filter((p: any) => selectedSplitPageIds.includes(p.id))
+        .map((p: any, idx: number) => ({
+          originalUri: p.originalUri,
+          imageUri: p.imageUri,
+          processedUri: p.processedUri,
+          order: idx,
+          filters: p.filters,
+          cropPoints: p.cropPoints,
+        }));
+
+      await addScannedPages(splitProj.id, pagesToSplit);
+      showToast(
+        `Extracted ${selectedSplitPageIds.length} pages into new document!`,
+        'success'
+      );
+      setSplitModalVisible(false);
+      setSelectedSplitProj(null);
+      setSelectedSplitPageIds([]);
+      handleSelectProject(splitProj);
+    } catch (e) {
+      console.error(e);
+      showToast('Split failed. Please try again.', 'error');
+    } finally {
+      setIsSplitting(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
   const renderProjectItem = ({ item }: { item: Project }) => (
     <Card
       onPress={() => handleSelectProject(item)}
@@ -152,13 +249,18 @@ export const DashboardScreen: React.FC = () => {
         <Ionicons name="folder" size={36} color={Theme.colors.ocean[500]} />
         <Text style={styles.pageCount}>{item.pageCount} pages</Text>
       </View>
-      <Text style={styles.projectTitle} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.projectTitle} numberOfLines={1}>
+        {item.title}
+      </Text>
       <Text style={styles.projectDate}>
         {new Date(item.updatedAt).toLocaleDateString()}
       </Text>
     </Card>
   );
 
+  // ---------------------------------------------------------------------------
+  // JSX
+  // ---------------------------------------------------------------------------
   return (
     <View style={styles.container}>
       <View style={[styles.header, isLargeScreen && styles.largeHeader]}>
@@ -176,13 +278,18 @@ export const DashboardScreen: React.FC = () => {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, isLargeScreen && styles.largeScrollContent]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isLargeScreen && styles.largeScrollContent,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Quick Scan Call to Action */}
         <Card style={styles.statsCard} padding="lg">
           <Text style={styles.statsTitle}>Ready to scan?</Text>
-          <Text style={styles.statsSubtitle}>Scan bills, notes, documents or books instantly.</Text>
+          <Text style={styles.statsSubtitle}>
+            Scan bills, notes, documents or books instantly.
+          </Text>
           <Button
             size="md"
             onPress={handleCreateProject}
@@ -193,23 +300,65 @@ export const DashboardScreen: React.FC = () => {
           </Button>
         </Card>
 
-        {/* PDF Utility Tools Section */}
+        {/* PDF Utility Tools Section — 2×2 Grid */}
         <Text style={styles.sectionTitle}>PDF Utility Tools</Text>
         <View style={styles.utilityGrid}>
-          <Card style={styles.utilityCard} padding="md" onPress={() => setMergeModalVisible(true)}>
+          {/* Row 1 */}
+          <Card
+            style={styles.utilityCard}
+            padding="md"
+            onPress={() => {
+              setSelectedMergeProjIds([]);
+              setMergedDocTitle('');
+              setMergeModalVisible(true);
+            }}
+          >
             <View style={[styles.utilityIconBg, { backgroundColor: `${Theme.colors.ocean[500]}15` }]}>
               <Ionicons name="git-merge" size={24} color={Theme.colors.ocean[500]} />
             </View>
-            <Text style={styles.utilityTitle}>Merge Documents</Text>
-            <Text style={styles.utilityDesc}>Combine scanned files into one PDF.</Text>
+            <Text style={styles.utilityTitle}>Merge Docs</Text>
+            <Text style={styles.utilityDesc}>Combine files into one PDF.</Text>
           </Card>
 
-          <Card style={styles.utilityCard} padding="md" onPress={() => setSplitModalVisible(true)}>
+          <Card
+            style={styles.utilityCard}
+            padding="md"
+            onPress={() => {
+              setSelectedSplitProj(null);
+              setSelectedSplitPageIds([]);
+              setSplitModalVisible(true);
+            }}
+          >
             <View style={[styles.utilityIconBg, { backgroundColor: `${Theme.colors.accent.teal}15` }]}>
               <Ionicons name="git-branch" size={24} color={Theme.colors.accent.teal} />
             </View>
-            <Text style={styles.utilityTitle}>Split Document</Text>
-            <Text style={styles.utilityDesc}>Extract pages to separate documents.</Text>
+            <Text style={styles.utilityTitle}>Split Doc</Text>
+            <Text style={styles.utilityDesc}>Extract pages to a new file.</Text>
+          </Card>
+
+          {/* Row 2 */}
+          <Card
+            style={styles.utilityCard}
+            padding="md"
+            onPress={() => navigation.navigate('Export')}
+          >
+            <View style={[styles.utilityIconBg, { backgroundColor: `${Theme.colors.accent.amber}15` }]}>
+              <Ionicons name="layers-outline" size={24} color={Theme.colors.accent.amber} />
+            </View>
+            <Text style={styles.utilityTitle}>Compress</Text>
+            <Text style={styles.utilityDesc}>Shrink PDF file size.</Text>
+          </Card>
+
+          <Card
+            style={styles.utilityCard}
+            padding="md"
+            onPress={() => setProtectModalVisible(true)}
+          >
+            <View style={[styles.utilityIconBg, { backgroundColor: `${Theme.colors.accent.coral}15` }]}>
+              <Ionicons name="lock-closed-outline" size={24} color={Theme.colors.accent.coral} />
+            </View>
+            <Text style={styles.utilityTitle}>Protect</Text>
+            <Text style={styles.utilityDesc}>Add password to PDF.</Text>
           </Card>
         </View>
 
@@ -217,7 +366,10 @@ export const DashboardScreen: React.FC = () => {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Documents</Text>
           {projects.length > 0 && (
-            <Text style={styles.viewAllText} onPress={() => navigation.navigate('Projects')}>
+            <Text
+              style={styles.viewAllText}
+              onPress={() => navigation.navigate('Projects')}
+            >
               View All
             </Text>
           )}
@@ -225,7 +377,12 @@ export const DashboardScreen: React.FC = () => {
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={Theme.colors.text.muted} style={styles.searchIcon} />
+          <Ionicons
+            name="search"
+            size={20}
+            color={Theme.colors.text.muted}
+            style={styles.searchIcon}
+          />
           <TextInput
             placeholder="Search documents..."
             value={search}
@@ -237,13 +394,23 @@ export const DashboardScreen: React.FC = () => {
 
         {filteredProjects.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={60} color={Theme.colors.text.muted} />
+            <Ionicons
+              name="document-text-outline"
+              size={60}
+              color={Theme.colors.text.muted}
+            />
             <Text style={styles.emptyTitle}>No documents found</Text>
             <Text style={styles.emptySubtitle}>
-              {search ? 'Try adjusting your search query' : 'Create your first document scan now'}
+              {search
+                ? 'Try adjusting your search query'
+                : 'Create your first document scan now'}
             </Text>
             {!search && (
-              <Button size="md" onPress={handleCreateProject} style={{ marginTop: Theme.spacing.md }}>
+              <Button
+                size="md"
+                onPress={handleCreateProject}
+                style={{ marginTop: Theme.spacing.md }}
+              >
                 Create Scan
               </Button>
             )}
@@ -260,11 +427,16 @@ export const DashboardScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      {/* MERGE MODAL */}
+      {/* ===== MERGE MODAL ===== */}
       <Modal
         visible={mergeModalVisible}
-        onClose={() => setMergeModalVisible(false)}
+        onClose={() => {
+          setMergeModalVisible(false);
+          setSelectedMergeProjIds([]);
+          setMergedDocTitle('');
+        }}
         title="Merge Documents"
+        size="lg"
       >
         <TextInput
           placeholder="New Document Title (Optional)"
@@ -275,7 +447,7 @@ export const DashboardScreen: React.FC = () => {
         />
 
         <Text style={styles.modalInstruction}>Select documents to merge in order:</Text>
-        <ScrollView style={styles.modalScroll}>
+        <ScrollView style={styles.modalScroll} nestedScrollEnabled>
           {projects.map(proj => (
             <TouchableOpacity
               key={proj.id}
@@ -286,23 +458,36 @@ export const DashboardScreen: React.FC = () => {
               onPress={() => toggleMergeSelect(proj.id)}
             >
               <Ionicons
-                name={selectedMergeProjIds.includes(proj.id) ? "checkbox" : "square-outline"}
+                name={
+                  selectedMergeProjIds.includes(proj.id) ? 'checkbox' : 'square-outline'
+                }
                 size={22}
-                color={selectedMergeProjIds.includes(proj.id) ? Theme.colors.ocean[500] : Theme.colors.text.muted}
+                color={
+                  selectedMergeProjIds.includes(proj.id)
+                    ? Theme.colors.ocean[500]
+                    : Theme.colors.text.muted
+                }
               />
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={styles.modalItemTitle}>{proj.title}</Text>
                 <Text style={styles.modalItemSub}>{proj.pageCount} pages</Text>
               </View>
-              {selectedMergeProjIds.includes(proj.id) && (
+              {mergeLoadingProjId === proj.id ? (
+                <ActivityIndicator size="small" color={Theme.colors.ocean[500]} />
+              ) : selectedMergeProjIds.includes(proj.id) ? (
                 <View style={styles.mergeIndexBadge}>
                   <Text style={styles.mergeIndexText}>
                     {selectedMergeProjIds.indexOf(proj.id) + 1}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </TouchableOpacity>
           ))}
+          {projects.length === 0 && (
+            <Text style={styles.emptyModalText}>
+              No documents found. Create a scan first.
+            </Text>
+          )}
         </ScrollView>
 
         <Button
@@ -310,81 +495,129 @@ export const DashboardScreen: React.FC = () => {
           fullWidth
           style={{ marginTop: Theme.spacing.md }}
           onPress={handleMergeDocuments}
-          disabled={selectedMergeProjIds.length < 2}
+          disabled={selectedMergeProjIds.length < 2 || isMerging}
         >
-          Merge Files
+          {isMerging
+            ? 'Merging...'
+            : `Merge ${selectedMergeProjIds.length > 0 ? `(${selectedMergeProjIds.length})` : ''} Files`}
         </Button>
       </Modal>
 
-      {/* SPLIT MODAL */}
+      {/* ===== SPLIT MODAL ===== */}
       <Modal
         visible={splitModalVisible}
-        onClose={() => { setSplitModalVisible(false); setSelectedSplitProj(null); }}
+        onClose={() => {
+          setSplitModalVisible(false);
+          setSelectedSplitProj(null);
+          setSelectedSplitPageIds([]);
+        }}
         title="Split Document"
+        size="lg"
       >
         {!selectedSplitProj ? (
           <>
             <Text style={styles.modalInstruction}>Choose document to split:</Text>
-            <ScrollView style={styles.modalScroll}>
-              {projects.filter(p => p.pageCount > 1).map(proj => (
-                <TouchableOpacity
-                  key={proj.id}
-                  style={styles.modalListItem}
-                  onPress={() => {
-                    setSelectedSplitProj(proj);
-                    setSelectedSplitPageIds([]);
-                  }}
-                >
-                  <Ionicons name="folder-open-outline" size={22} color={Theme.colors.ocean[500]} />
-                  <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={styles.modalItemTitle}>{proj.title}</Text>
-                    <Text style={styles.modalItemSub}>{proj.pageCount} pages</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={Theme.colors.text.muted} />
-                </TouchableOpacity>
-              ))}
+            <ScrollView style={styles.modalScroll} nestedScrollEnabled>
+              {projects
+                .filter(p => p.pageCount > 1)
+                .map(proj => (
+                  <TouchableOpacity
+                    key={proj.id}
+                    style={styles.modalListItem}
+                    onPress={() => handleSelectSplitProject(proj)}
+                  >
+                    <Ionicons
+                      name="folder-open-outline"
+                      size={22}
+                      color={Theme.colors.ocean[500]}
+                    />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={styles.modalItemTitle}>{proj.title}</Text>
+                      <Text style={styles.modalItemSub}>{proj.pageCount} pages</Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={Theme.colors.text.muted}
+                    />
+                  </TouchableOpacity>
+                ))}
               {projects.filter(p => p.pageCount > 1).length === 0 && (
-                <Text style={styles.emptyModalText}>No documents with multiple pages available.</Text>
+                <Text style={styles.emptyModalText}>
+                  No documents with multiple pages available.
+                </Text>
               )}
             </ScrollView>
           </>
         ) : (
           <>
             <Text style={styles.modalInstruction}>
-              Selected: <Text style={{ fontWeight: 'bold' }}>{selectedSplitProj.title}</Text>
+              Selected:{' '}
+              <Text style={{ fontWeight: 'bold' }}>{selectedSplitProj.title}</Text>
             </Text>
-            <Text style={styles.modalItemSub}>Check the pages you want to extract into a new document:</Text>
+            <Text style={styles.modalItemSub}>
+              Check the pages you want to extract into a new document:
+            </Text>
 
-            <ScrollView style={styles.modalScroll}>
-              {scannedPages
-                .filter(p => p.projectId === selectedSplitProj.id)
-                .sort((a, b) => a.order - b.order)
-                .map((page, index) => (
-                  <TouchableOpacity
-                    key={page.id}
-                    style={[
-                      styles.modalListItem,
-                      selectedSplitPageIds.includes(page.id) && styles.modalListItemActive,
-                    ]}
-                    onPress={() => toggleSplitPageSelect(page.id)}
-                  >
-                    <Ionicons
-                      name={selectedSplitPageIds.includes(page.id) ? "checkbox" : "square-outline"}
-                      size={22}
-                      color={selectedSplitPageIds.includes(page.id) ? Theme.colors.ocean[500] : Theme.colors.text.muted}
-                    />
-                    <Image source={{ uri: page.processedUri || page.imageUri }} style={styles.splitPageThumb} />
-                    <Text style={styles.modalItemTitle}>Page {index + 1}</Text>
-                  </TouchableOpacity>
-                ))}
-            </ScrollView>
+            {splitPagesLoading ? (
+              <View style={styles.splitLoadingContainer}>
+                <ActivityIndicator size="large" color={Theme.colors.ocean[500]} />
+                <Text style={[styles.modalItemSub, { marginTop: Theme.spacing.sm }]}>
+                  Loading pages...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalScroll} nestedScrollEnabled>
+                {(projectPagesCache[selectedSplitProj.id] || [])
+                  .slice()
+                  .sort((a: any, b: any) => a.order - b.order)
+                  .map((page: any, index: number) => (
+                    <TouchableOpacity
+                      key={page.id}
+                      style={[
+                        styles.modalListItem,
+                        selectedSplitPageIds.includes(page.id) &&
+                          styles.modalListItemActive,
+                      ]}
+                      onPress={() => toggleSplitPageSelect(page.id)}
+                    >
+                      <Ionicons
+                        name={
+                          selectedSplitPageIds.includes(page.id)
+                            ? 'checkbox'
+                            : 'square-outline'
+                        }
+                        size={22}
+                        color={
+                          selectedSplitPageIds.includes(page.id)
+                            ? Theme.colors.ocean[500]
+                            : Theme.colors.text.muted
+                        }
+                      />
+                      <Image
+                        source={{ uri: page.processedUri || page.imageUri }}
+                        style={styles.splitPageThumb}
+                      />
+                      <Text style={styles.modalItemTitle}>Page {index + 1}</Text>
+                    </TouchableOpacity>
+                  ))}
+                {(projectPagesCache[selectedSplitProj.id] || []).length === 0 && (
+                  <Text style={styles.emptyModalText}>
+                    No pages found in this document.
+                  </Text>
+                )}
+              </ScrollView>
+            )}
 
             <View style={styles.modalActionsRow}>
               <Button
                 variant="outline"
                 size="md"
                 style={{ flex: 1 }}
-                onPress={() => setSelectedSplitProj(null)}
+                onPress={() => {
+                  setSelectedSplitProj(null);
+                  setSelectedSplitPageIds([]);
+                }}
               >
                 Back
               </Button>
@@ -392,13 +625,63 @@ export const DashboardScreen: React.FC = () => {
                 size="md"
                 style={{ flex: 1 }}
                 onPress={handleSplitDocument}
-                disabled={selectedSplitPageIds.length === 0}
+                disabled={selectedSplitPageIds.length === 0 || isSplitting}
               >
-                Extract Pages
+                {isSplitting
+                  ? 'Extracting...'
+                  : `Extract (${selectedSplitPageIds.length})`}
               </Button>
             </View>
           </>
         )}
+      </Modal>
+      {/* ===== PROTECT MODAL ===== */}
+      <Modal
+        visible={protectModalVisible}
+        onClose={() => setProtectModalVisible(false)}
+        title="Password Protect PDF"
+        size="lg"
+      >
+        <View style={styles.protectInfoBox}>
+          <Ionicons name="information-circle" size={22} color={Theme.colors.ocean[500]} />
+          <Text style={styles.protectInfoText}>
+            PDF encryption (AES) requires a server-side tool. Our current PDF library (pdf-lib) does not
+            support true password encryption in the browser.{'
+'}{'
+'}To protect your document, you can:{'
+'}
+            • Add a visible <Text style={{ fontWeight: 'bold' }}>CONFIDENTIAL</Text> watermark via Export screen{'
+'}
+            • Use a dedicated tool like Smallpdf or iLovePDF to encrypt after downloading
+          </Text>
+        </View>
+
+        <Button
+          size="md"
+          fullWidth
+          style={{ marginTop: Theme.spacing.md }}
+          onPress={() => {
+            setProtectModalVisible(false);
+            navigation.navigate('Export');
+          }}
+        >
+          <Ionicons name="open-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+          Go to Export & Add Watermark
+        </Button>
+
+        <Button
+          variant="outline"
+          size="md"
+          fullWidth
+          style={{ marginTop: Theme.spacing.sm }}
+          onPress={() => {
+            if (Platform.OS === 'web') window.open('https://smallpdf.com/protect-pdf', '_blank');
+            setProtectModalVisible(false);
+          }}
+        >
+          <Ionicons name="lock-closed-outline" size={18} color={Theme.colors.ocean[500]} style={{ marginRight: 6 }} />
+          Open Smallpdf.com Protect Tool
+        </Button>
       </Modal>
     </View>
   );
@@ -565,19 +848,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Theme.spacing.xs,
   },
-  // PDF tools specific layout
+  // PDF tools
   utilityGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Theme.spacing.md,
     marginBottom: Theme.spacing.xl,
   },
   utilityCard: {
-    flex: 1,
+    width: '47%',
     alignItems: 'center',
     justifyContent: 'center',
     borderColor: Theme.colors.border.light,
     backgroundColor: Theme.colors.surface.primary,
     textAlign: 'center',
+    marginBottom: Theme.spacing.xs,
   },
   utilityIconBg: {
     width: 48,
@@ -598,7 +883,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
-  // Modal styles
+  // Modal styles (kept for any legacy usage)
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -685,9 +970,27 @@ const styles = StyleSheet.create({
     marginRight: Theme.spacing.md,
     backgroundColor: '#DDD',
   },
+  splitLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: Theme.spacing.xl,
+  },
   modalActionsRow: {
     flexDirection: 'row',
     gap: Theme.spacing.md,
     marginTop: Theme.spacing.md,
+  },
+  protectInfoBox: {
+    backgroundColor: `${Theme.colors.ocean[500]}10`,
+    borderRadius: Theme.borderRadius.md,
+    padding: Theme.spacing.md,
+    flexDirection: 'row',
+    gap: Theme.spacing.sm,
+    marginBottom: Theme.spacing.sm,
+  },
+  protectInfoText: {
+    ...Theme.textStyles.bodySmall,
+    color: Theme.colors.text.secondary,
+    flex: 1,
+    lineHeight: 20,
   },
 });

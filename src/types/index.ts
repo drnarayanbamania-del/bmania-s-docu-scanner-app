@@ -40,9 +40,11 @@ export interface FilterSettings {
   brightness: number;
   contrast: number;
   saturation: number;
+  exposure: number;
+  clarity: number;
   grayscale: boolean;
   autoEnhance: boolean;
-  preset?: 'original' | 'color' | 'magic' | 'bw' | 'grayscale' | 'hd' | 'shadows' | 'noise';
+  preset?: 'original' | 'color' | 'magic' | 'bw' | 'grayscale' | 'hd' | 'shadows' | 'noise' | 'clarity' | 'vivid';
 }
 
 export interface PDFExportOptions {

@@ -232,6 +232,149 @@ export const usePDFGenerator = () => {
     }
   }, []);
 
+  /**
+   * Compress PDF by re-rendering each page image at a reduced scale + lower JPEG quality.
+   * compressionLevel: 'low' (slight reduction), 'medium' (good balance), 'high' (max reduction)
+   */
+  const compressPDF = useCallback(async (
+    pages: ScannedPage[],
+    options: ExtendedPDFExportOptions,
+    compressionLevel: 'low' | 'medium' | 'high' = 'medium'
+  ): Promise<{ uri: string; size: number; savedBytes: number } | null> => {
+    const scaleMap   = { low: 0.85, medium: 0.65, high: 0.45 };
+    const qualityMap = { low: 0.72, medium: 0.52, high: 0.32 };
+    const scale   = scaleMap[compressionLevel];
+    const quality = qualityMap[compressionLevel];
+
+    setIsGenerating(true);
+    setProgress(0);
+    setError(null);
+
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const pageSizes = {
+        A4:     { width: 595.28, height: 841.89 },
+        Letter: { width: 612,    height: 792     },
+        Legal:  { width: 612,    height: 1008    },
+      };
+      const pageSize = pageSizes[options.pageSize];
+      const margin   = options.margin * 72;
+      const maxW     = pageSize.width  - 2 * margin;
+      const maxH     = pageSize.height - 2 * margin;
+
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const imageUri = page.processedUri || page.imageUri || page.originalUri;
+
+        let compressedDataUrl: string | null = null;
+
+        if (Platform.OS === 'web') {
+          try {
+            // Re-render at reduced scale via Canvas
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = imageUri;
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+
+            const canvas = document.createElement('canvas');
+            canvas.width  = Math.round(img.width  * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext('2d')!;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          } catch (e) {
+            console.error('Compression canvas error:', e);
+            continue;
+          }
+        }
+
+        let pdfImage;
+        if (Platform.OS === 'web' && compressedDataUrl) {
+          try {
+            const res = await fetch(compressedDataUrl);
+            const buf = await res.arrayBuffer();
+            pdfImage = await pdfDoc.embedJpg(buf);
+          } catch { continue; }
+        } else if (Platform.OS !== 'web') {
+          try {
+            const imageBytes = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
+            try { pdfImage = await pdfDoc.embedJpg(imageBytes); }
+            catch { pdfImage = await pdfDoc.embedPng(imageBytes); }
+          } catch { continue; }
+        } else {
+          continue;
+        }
+
+        if (!pdfImage) continue;
+
+        const ar = pdfImage.width / pdfImage.height;
+        let drawW = maxW;
+        let drawH = drawW / ar;
+        if (drawH > maxH) { drawH = maxH; drawW = drawH * ar; }
+
+        const x = (pageSize.width  - drawW) / 2;
+        const y = (pageSize.height - drawH) / 2;
+
+        const pdfPage = pdfDoc.addPage([pageSize.width, pageSize.height]);
+        pdfPage.drawRectangle({ x: 0, y: 0, width: pageSize.width, height: pageSize.height, color: rgb(1, 1, 1) });
+        pdfPage.drawImage(pdfImage, { x, y, width: drawW, height: drawH });
+
+        if (options.watermarkText) {
+          pdfPage.drawText(options.watermarkText, {
+            x: pageSize.width / 2 - 150, y: pageSize.height / 2 - 50,
+            size: 40, font: boldFont, color: rgb(0.85, 0.85, 0.85),
+            rotate: degrees(45), opacity: 0.35,
+          });
+        }
+
+        // Compression note on first page
+        if (i === 0) {
+          pdfPage.drawText(`Compressed · ${compressionLevel.toUpperCase()}`, {
+            x: margin, y: pageSize.height - margin - 14,
+            size: 8, font, color: rgb(0.6, 0.6, 0.6),
+          });
+        }
+
+        setProgress(((i + 1) / pages.length) * 100);
+      }
+
+      if (Platform.OS === 'web') {
+        const pdfBytes = await pdfDoc.save();
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url  = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `compressed_${generateId()}.pdf`;
+        link.click();
+        const originalEst = Math.round(blob.size / (scale * quality / (0.65 * 0.52)));
+        setIsGenerating(false);
+        setProgress(100);
+        return { uri: url, size: blob.size, savedBytes: Math.max(0, originalEst - blob.size) };
+      }
+
+      const pdfBytes  = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
+      const fileName  = `compressed_${generateId()}.pdf`;
+      const fileUri   = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(fileUri, pdfBytes, { encoding: FileSystem.EncodingType.Base64 });
+      const fileInfo  = await FileSystem.getInfoAsync(fileUri);
+      const size = (fileInfo as any).size || 0;
+      setIsGenerating(false);
+      setProgress(100);
+      return { uri: fileUri, size, savedBytes: 0 };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Compression failed';
+      setError(msg);
+      setIsGenerating(false);
+      return null;
+    }
+  }, []);
+
+
   const reset = useCallback(() => {
     setIsGenerating(false);
     setProgress(0);
@@ -243,6 +386,7 @@ export const usePDFGenerator = () => {
     progress,
     error,
     generatePDF,
+    compressPDF,
     sharePDF,
     savePDF,
     reset,

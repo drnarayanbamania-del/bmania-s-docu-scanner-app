@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Modal as RNModal, Animated, TouchableOpacity, Platform, BackHandler, Text } from 'react-native';
+import { View, StyleSheet, Modal as RNModal, Animated, TouchableOpacity, Platform, BackHandler, Text, useWindowDimensions } from 'react-native';
 import { Theme } from '../../constants/theme';
 
 interface ModalProps {
@@ -24,6 +24,9 @@ export const Modal: React.FC<ModalProps> = ({
   animationType = 'slide',
 }) => {
   const [anim] = useState(() => new Animated.Value(0));
+  const { width: windowWidth } = useWindowDimensions();
+
+  const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
   useEffect(() => {
     if (visible) {
@@ -54,7 +57,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   if (!visible && anim._value === 0) return null;
 
-  const sizes = {
+  const mobileSizes = {
     sm: '85%',
     md: '90%',
     lg: '95%',
@@ -62,14 +65,22 @@ export const Modal: React.FC<ModalProps> = ({
     full: '100%',
   };
 
+  const webSizes = {
+    sm: 420,
+    md: 560,
+    lg: 720,
+    xl: 900,
+    full: '100%',
+  };
+
   const overlayOpacity = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.5],
+    outputRange: [0, 0.6],
   });
 
   const slideTranslate = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [Platform.OS === 'ios' ? 50 : '100%', 0],
+    outputRange: [Platform.OS === 'ios' ? 50 : (isLargeScreen ? 20 : '100%'), 0],
   });
 
   const fadeOpacity = anim.interpolate({
@@ -81,6 +92,10 @@ export const Modal: React.FC<ModalProps> = ({
     ? { transform: [{ translateY: slideTranslate }], opacity: fadeOpacity }
     : { opacity: fadeOpacity };
 
+  const containerStyle = isLargeScreen
+    ? [styles.containerWeb, { width: webSizes[size] }, modalStyle]
+    : [styles.containerMobile, { width: mobileSizes[size] }, modalStyle];
+
   return (
     <RNModal
       visible={visible}
@@ -91,26 +106,40 @@ export const Modal: React.FC<ModalProps> = ({
       <Animated.View
         style={[
           styles.overlay,
+          isLargeScreen && styles.overlayWeb,
           { opacity: overlayOpacity },
         ]}
-        onStartShouldSetResponder={() => closeOnOverlayPress}
-        onResponderGrant={closeOnOverlayPress ? onClose : undefined}
       >
-        <Animated.View style={[styles.container, modalStyle, { width: sizes[size] }]}>
-          {showHandle && (
+        {/* Overlay background tap to close */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={closeOnOverlayPress ? onClose : undefined}
+        />
+
+        <Animated.View style={containerStyle}>
+          {/* Handle — only on mobile bottom sheet */}
+          {showHandle && !isLargeScreen && (
             <View style={styles.handleContainer}>
               <View style={styles.handle} />
             </View>
           )}
+
+          {/* Title header */}
           {title && (
             <View style={styles.header}>
               <Text style={styles.title}>{title}</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
           )}
-          <View style={styles.content}>
+
+          <View style={[styles.content, isLargeScreen && styles.contentWeb]}>
             {children}
           </View>
         </Animated.View>
@@ -125,12 +154,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.colors.overlay.medium,
     justifyContent: 'flex-end',
+    alignItems: 'center',
   },
-  container: {
+  overlayWeb: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Mobile: slides up from bottom
+  containerMobile: {
     backgroundColor: Theme.colors.surface.primary,
     borderTopLeftRadius: Theme.borderRadius.xl,
     borderTopRightRadius: Theme.borderRadius.xl,
     maxHeight: '90%',
+    overflow: 'hidden',
+    ...Theme.shadows.xl,
+  },
+  // Web: centered dialog
+  containerWeb: {
+    backgroundColor: Theme.colors.surface.primary,
+    borderRadius: Theme.borderRadius.xl,
+    maxHeight: '85%',
     overflow: 'hidden',
     ...Theme.shadows.xl,
   },
@@ -169,5 +212,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Theme.spacing.lg,
     paddingVertical: Theme.spacing.md,
     maxHeight: '70%',
+  },
+  contentWeb: {
+    maxHeight: '75%',
   },
 });

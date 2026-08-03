@@ -12,8 +12,8 @@ import { generateId, formatFileSize } from '../../utils/helpers';
 
 export const ExportScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { currentProject, scannedPages } = useApp();
-  const { isGenerating, progress, error, generatePDF, sharePDF } = usePDFGenerator();
+  const { currentProject, scannedPages, loadScannedPages } = useApp();
+  const { isGenerating, progress, error, generatePDF, compressPDF, sharePDF } = usePDFGenerator();
   const { showToast } = useToast();
   const { width: windowWidth } = useWindowDimensions();
 
@@ -30,6 +30,11 @@ export const ExportScreen: React.FC = () => {
   const [watermark, setWatermark] = useState('');
   const [password, setPassword] = useState('');
   const [encryptPdf, setEncryptPdf] = useState(false);
+
+  // Compress PDF States
+  const [compressLevel, setCompressLevel] = useState<'low' | 'medium' | 'high'>('medium');
+  const [compressResult, setCompressResult] = useState<{ size: number; savedBytes: number } | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   // Success view states
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -107,7 +112,29 @@ export const ExportScreen: React.FC = () => {
     }
   };
 
-  // Share to WhatsApp Handler
+  // Compress PDF Handler
+  const handleCompress = async () => {
+    if (projectPages.length === 0) {
+      showToast('No pages to compress', 'error');
+      return;
+    }
+    setIsCompressing(true);
+    try {
+      const result = await compressPDF(
+        projectPages,
+        { pageSize, quality, margin, includeMetadata },
+        compressLevel
+      );
+      if (result) {
+        setCompressResult({ size: result.size, savedBytes: result.savedBytes });
+        showToast(`Compressed! Saved ~${formatFileSize(result.savedBytes)}`, 'success');
+      } else {
+        showToast('Compression failed', 'error');
+      }
+    } catch (e) { console.error(e); showToast('Compression error', 'error'); }
+    setIsCompressing(false);
+  };
+
   const handleShareToWhatsApp = () => {
     const textMessage = `Check out my document "${currentProject?.title || 'Scan'}" exported as ${exportFormat.toUpperCase()}!`;
     const encodedText = encodeURIComponent(textMessage);
@@ -386,6 +413,75 @@ export const ExportScreen: React.FC = () => {
               )}
             </Card>
 
+            {/* Compress PDF Card */}
+            {exportFormat === 'pdf' && (
+              <Card style={styles.settingsCard} padding="lg">
+                <View style={styles.compressHeader}>
+                  <View style={[styles.compressIconBg, { backgroundColor: `${Theme.colors.accent.teal}15` }]}>
+                    <Ionicons name="layers-outline" size={20} color={Theme.colors.accent.teal} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>Compress PDF</Text>
+                    <Text style={styles.settingDesc}>Reduce file size by lowering image resolution.</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.optionsWrapper, { marginTop: Theme.spacing.md }]}>
+                  {(['low', 'medium', 'high'] as const).map(lvl => (
+                    <TouchableOpacity
+                      key={lvl}
+                      style={[
+                        styles.optionBtn,
+                        compressLevel === lvl && { ...styles.optionBtnActive, backgroundColor: `${Theme.colors.accent.teal}15`, borderColor: Theme.colors.accent.teal },
+                      ]}
+                      onPress={() => setCompressLevel(lvl)}
+                    >
+                      <Text style={[
+                        styles.optionText,
+                        compressLevel === lvl && { color: Theme.colors.accent.teal, fontFamily: Theme.typography.fontFamilies.bold },
+                      ]}>
+                        {lvl === 'low' ? '🔵 Low' : lvl === 'medium' ? '🟠 Medium' : '🔴 High'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.compressInfo}>
+                  <Ionicons name="information-circle-outline" size={14} color={Theme.colors.text.muted} />
+                  <Text style={styles.compressInfoText}>
+                    {compressLevel === 'low' ? 'Low: ~15–25% smaller, minimal quality loss'
+                      : compressLevel === 'medium' ? 'Medium: ~40–55% smaller, good quality balance'
+                      : 'High: ~60–75% smaller, visible quality reduction'}
+                  </Text>
+                </View>
+
+                {compressResult && (
+                  <View style={styles.compressResultRow}>
+                    <Ionicons name="checkmark-circle" size={16} color={Theme.colors.status.success} />
+                    <Text style={styles.compressResultText}>
+                      Last compressed: {formatFileSize(compressResult.size)}
+                      {compressResult.savedBytes > 0 ? ` · saved ~${formatFileSize(compressResult.savedBytes)}` : ''}
+                    </Text>
+                  </View>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="md"
+                  fullWidth
+                  style={{ marginTop: Theme.spacing.md, borderColor: Theme.colors.accent.teal }}
+                  onPress={handleCompress}
+                  disabled={isCompressing || isGenerating}
+                >
+                  {isCompressing
+                    ? <ActivityIndicator size="small" color={Theme.colors.accent.teal} />
+                    : <><Ionicons name="layers-outline" size={18} color={Theme.colors.accent.teal} style={{ marginRight: 6 }} />
+                       <Text style={{ color: Theme.colors.accent.teal, fontFamily: Theme.typography.fontFamilies.semiBold }}>Compress & Download</Text></>
+                  }
+                </Button>
+              </Card>
+            )}
+
             <Button
               size="lg"
               fullWidth
@@ -428,10 +524,44 @@ const styles = StyleSheet.create({
     paddingBottom: Theme.spacing.xxl,
   },
   largeContent: {
-    maxWidth: 800,
-    width: '100%',
+    maxWidth: 700,
     alignSelf: 'center',
     paddingHorizontal: 0,
+  },
+  compressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.sm,
+    marginBottom: Theme.spacing.xs,
+  },
+  compressIconBg: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  compressInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Theme.spacing.xs,
+    marginTop: Theme.spacing.sm,
+    backgroundColor: Theme.colors.surface.tertiary,
+    borderRadius: Theme.borderRadius.sm,
+    padding: Theme.spacing.sm,
+  },
+  compressInfoText: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.text.secondary,
+    flex: 1,
+  },
+  compressResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.xs,
+    marginTop: Theme.spacing.sm,
+  },
+  compressResultText: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.status.success,
+    fontFamily: Theme.typography.fontFamilies.medium,
   },
   sectionCard: {
     marginBottom: Theme.spacing.lg,

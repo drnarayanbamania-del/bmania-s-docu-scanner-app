@@ -10,6 +10,7 @@ const AUTH_PROVIDER: AuthProviderType = 'supabase';
 interface AppContextType extends AppState {
   setCurrentProject: (project: Project | null) => void;
   loadProjects: () => Promise<void>;
+  loadScannedPages: (projectId: string) => Promise<ScannedPage[]>;
   createProject: (title: string, metadata?: Record<string, unknown>) => Promise<Project | null>;
   updateProject: (projectId: string, updates: Partial<Project>) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
@@ -49,6 +50,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.error('Failed to load projects:', error);
     }
   }, [user]);
+
+  const loadScannedPages = useCallback(async (projectId: string): Promise<ScannedPage[]> => {
+    try {
+      let result;
+      if (AUTH_PROVIDER === 'supabase') {
+        result = await supabaseService.getScannedPages(projectId);
+      } else {
+        result = await firebaseService.getScannedPages(projectId);
+      }
+      if (result.error) throw result.error;
+      const pages = (result.pages || []) as ScannedPage[];
+      // Merge into state so cached pages are available
+      setState(prev => {
+        const otherPages = prev.scannedPages.filter(p => p.projectId !== projectId);
+        return { ...prev, scannedPages: [...otherPages, ...pages].sort((a, b) => a.order - b.order) };
+      });
+      return pages;
+    } catch (error) {
+      console.error('Failed to load scanned pages:', error);
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
     loadProjects();
@@ -219,6 +242,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...state,
       setCurrentProject,
       loadProjects,
+      loadScannedPages,
       createProject,
       updateProject,
       deleteProject,
