@@ -1,22 +1,26 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, ScrollView, Switch, ActivityIndicator, Platform, useWindowDimensions, TextInput, TouchableOpacity, Linking } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme } from '../../constants/theme';
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
-import { useApp } from '../../context/AppContext';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Modal } from '../ui/Modal';
 import { usePDFGenerator } from '../../hooks/usePDFGenerator';
-import { useToast } from '../../components/ui/Toast';
+import { useToast } from '../ui/Toast';
 import { generateId, formatFileSize } from '../../utils/helpers';
+import { ScannedPage } from '../../types';
 
-export const ExportScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { currentProject, scannedPages, loadScannedPages } = useApp();
+interface ExportModalProps {
+  visible: boolean;
+  onClose: () => void;
+  projectPages: ScannedPage[];
+  projectTitle: string;
+}
+
+export const ExportModal: React.FC<ExportModalProps> = ({ visible, onClose, projectPages, projectTitle }) => {
   const { isGenerating, progress, error, generatePDF, compressPDF, sharePDF } = usePDFGenerator();
   const { showToast } = useToast();
   const { width: windowWidth } = useWindowDimensions();
-
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
   // Layout States
@@ -40,8 +44,6 @@ export const ExportScreen: React.FC = () => {
   const [exportSuccess, setExportSuccess] = useState(false);
   const [exportedFileUri, setExportedFileUri] = useState('');
   const [exportedFileSize, setExportedFileSize] = useState(0);
-
-  const projectPages = scannedPages.filter(p => p.projectId === currentProject?.id);
 
   const handleExport = async () => {
     if (projectPages.length === 0) {
@@ -69,24 +71,21 @@ export const ExportScreen: React.FC = () => {
         showToast(error || 'Failed to export PDF', 'error');
       }
     } else {
-      // Export JPG, PNG or DOCX
       try {
         if (Platform.OS === 'web') {
           if (exportFormat === 'jpg' || exportFormat === 'png') {
-            // Trigger browser downloads for image pages
             projectPages.forEach((page, index) => {
               const link = document.createElement('a');
               link.href = page.processedUri || page.imageUri || page.originalUri;
-              link.download = `${currentProject?.title || 'scan'}_page_${index + 1}.${exportFormat}`;
+              link.download = `${projectTitle || 'scan'}_page_${index + 1}.${exportFormat}`;
               link.click();
             });
-            setExportedFileSize(projectPages.length * 150000); // Approximate size
+            setExportedFileSize(projectPages.length * 150000); 
           } else if (exportFormat === 'docx') {
-            // DOCX format HTML download
             const docxContent = `
               <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
               <body>
-                <h2>${currentProject?.title}</h2>
+                <h2>${projectTitle}</h2>
                 <p>Total Scanned Pages: ${projectPages.length}</p>
                 ${projectPages.map((page, idx) => `<p>Page ${idx + 1}</p><img src="${page.processedUri || page.imageUri}" width="500"/><hr/>`).join('')}
               </body>
@@ -96,7 +95,7 @@ export const ExportScreen: React.FC = () => {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${currentProject?.title || 'document'}.docx`;
+            link.download = `${projectTitle || 'document'}.docx`;
             link.click();
             setExportedFileUri(url);
             setExportedFileSize(blob.size);
@@ -112,7 +111,6 @@ export const ExportScreen: React.FC = () => {
     }
   };
 
-  // Compress PDF Handler
   const handleCompress = async () => {
     if (projectPages.length === 0) {
       showToast('No pages to compress', 'error');
@@ -136,22 +134,19 @@ export const ExportScreen: React.FC = () => {
   };
 
   const handleShareToWhatsApp = () => {
-    const textMessage = `Check out my document "${currentProject?.title || 'Scan'}" exported as ${exportFormat.toUpperCase()}!`;
+    const textMessage = `Check out my document "${projectTitle || 'Scan'}" exported as ${exportFormat.toUpperCase()}!`;
     const encodedText = encodeURIComponent(textMessage);
     
     if (Platform.OS === 'web') {
-      // Open WhatsApp web link
       const whatsappWebUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
       window.open(whatsappWebUrl, '_blank');
       showToast('Redirected to WhatsApp Web! Drag and drop the downloaded file into the chat.', 'info');
     } else {
-      // Native WhatsApp scheme opening
       const nativeWhatsappUrl = `whatsapp://send?text=${encodedText}`;
       Linking.canOpenURL(nativeWhatsappUrl).then(supported => {
         if (supported) {
           Linking.openURL(nativeWhatsappUrl);
         } else {
-          // Fallback to native share sheet
           if (exportedFileUri) sharePDF(exportedFileUri);
         }
       });
@@ -162,27 +157,15 @@ export const ExportScreen: React.FC = () => {
     if (Platform.OS !== 'web' && exportedFileUri) {
       sharePDF(exportedFileUri);
     } else {
-      // Web fallback
       navigator.clipboard.writeText(window.location.href);
       showToast('App link copied to clipboard!', 'success');
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, isLargeScreen && styles.largeContent]}>
-        <Button variant="ghost" size="sm" onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={28} color={Theme.colors.text.secondary} />
-        </Button>
-        <Text style={styles.headerTitle}>
-          {exportSuccess ? 'Export Ready' : 'Export Document'}
-        </Text>
-        <View style={{ width: 48 }} />
-      </View>
-
+    <Modal visible={visible} onClose={onClose} title={exportSuccess ? 'Export Ready' : 'Export Document'} size="lg">
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, isLargeScreen && styles.largeContent]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {isGenerating ? (
@@ -199,7 +182,7 @@ export const ExportScreen: React.FC = () => {
             </View>
             <Text style={styles.successTitle}>Export Completed!</Text>
             <Text style={styles.successSub}>
-              {currentProject?.title} has been exported and downloaded.
+              {projectTitle} has been exported and downloaded.
             </Text>
 
             <Card style={styles.fileSummaryCard} padding="md">
@@ -211,7 +194,7 @@ export const ExportScreen: React.FC = () => {
                 />
                 <View style={{ marginLeft: Theme.spacing.sm, flex: 1 }}>
                   <Text style={styles.summaryFileName} numberOfLines={1}>
-                    {currentProject?.title}.{exportFormat}
+                    {projectTitle}.{exportFormat}
                   </Text>
                   <Text style={styles.summaryFileSize}>
                     {exportedFileSize ? formatFileSize(exportedFileSize) : 'Unknown size'} • {projectPages.length} pages
@@ -222,15 +205,12 @@ export const ExportScreen: React.FC = () => {
 
             <Text style={styles.shareInstructions}>Share your document directly:</Text>
 
-            {/* Sharing buttons */}
             <View style={styles.shareActionsCol}>
-              {/* WhatsApp Button */}
               <TouchableOpacity style={styles.whatsappBtn} onPress={handleShareToWhatsApp}>
                 <Ionicons name="logo-whatsapp" size={24} color="#FFF" />
                 <Text style={styles.whatsappBtnText}>Share to WhatsApp</Text>
               </TouchableOpacity>
 
-              {/* Native / General share */}
               <Button
                 variant="outline"
                 size="lg"
@@ -245,27 +225,20 @@ export const ExportScreen: React.FC = () => {
                 size="lg"
                 fullWidth
                 style={{ marginTop: Theme.spacing.md }}
-                onPress={() => navigation.goBack()}
+                onPress={() => {
+                  setExportSuccess(false);
+                  onClose();
+                }}
               >
-                Back to Document
+                Close
               </Button>
             </View>
           </View>
         ) : (
-          // SETTINGS PANEL
           <>
-            <Card style={styles.sectionCard} padding="lg">
-              <Text style={styles.sectionTitle}>Document Details</Text>
-              <Text style={styles.detailText}>
-                Title: <Text style={{ fontWeight: 'bold' }}>{currentProject?.title}</Text>
-              </Text>
-              <Text style={styles.detailText}>
-                Total Pages: <Text style={{ fontWeight: 'bold' }}>{projectPages.length}</Text>
-              </Text>
-            </Card>
-
-            <Card style={styles.sectionCard} padding="lg">
-              <Text style={styles.sectionTitle}>Export Format</Text>
+            {/* Format Selection */}
+            <Card style={styles.sectionCard} padding="md">
+              <Text style={styles.sectionTitle}>Format</Text>
               <View style={styles.formatGrid}>
                 {(['pdf', 'jpg', 'png', 'docx'] as const).map(fmt => (
                   <TouchableOpacity
@@ -277,10 +250,7 @@ export const ExportScreen: React.FC = () => {
                     onPress={() => setExportFormat(fmt)}
                   >
                     <Ionicons
-                      name={
-                        fmt === 'pdf' ? 'document-text' :
-                        fmt === 'docx' ? 'document' : 'image'
-                      }
+                      name={fmt === 'pdf' ? 'document-text' : fmt === 'docx' ? 'document' : 'image'}
                       size={24}
                       color={exportFormat === fmt ? Theme.colors.ocean[500] : Theme.colors.text.secondary}
                     />
@@ -292,91 +262,47 @@ export const ExportScreen: React.FC = () => {
               </View>
             </Card>
 
-            {exportFormat === 'pdf' && (
-              <Card style={styles.settingsCard} padding="lg">
-                <Text style={styles.sectionTitle}>PDF Layout Options</Text>
-
-                <View style={styles.settingRow}>
-                  <Text style={styles.settingLabel}>Page Size</Text>
-                  <View style={styles.optionsWrapper}>
-                    {(['A4', 'Letter', 'Legal'] as const).map(size => (
-                      <TouchableOpacity
-                        key={size}
-                        style={[
-                          styles.optionBtn,
-                          pageSize === size && styles.optionBtnActive,
-                        ]}
-                        onPress={() => setPageSize(size)}
-                      >
-                        <Text style={[styles.optionText, pageSize === size && styles.optionTextActive]}>
-                          {size}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.settingRow}>
-                  <Text style={styles.settingLabel}>Image Compression Quality</Text>
-                  <View style={styles.optionsWrapper}>
-                    {(['low', 'medium', 'high'] as const).map(q => (
-                      <TouchableOpacity
-                        key={q}
-                        style={[
-                          styles.optionBtn,
-                          quality === q && styles.optionBtnActive,
-                        ]}
-                        onPress={() => setQuality(q)}
-                      >
-                        <Text style={[styles.optionText, quality === q && styles.optionTextActive]}>
-                          {q.charAt(0).toUpperCase() + q.slice(1)} (Compress)
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.settingRow}>
-                  <Text style={styles.settingLabel}>Page Margins</Text>
-                  <View style={styles.optionsWrapper}>
-                    {([0, 0.25, 0.5] as const).map(m => (
-                      <TouchableOpacity
-                        key={m}
-                        style={[
-                          styles.optionBtn,
-                          margin === m && styles.optionBtnActive,
-                        ]}
-                        onPress={() => setMargin(m)}
-                      >
-                        <Text style={[styles.optionText, margin === m && styles.optionTextActive]}>
-                          {m === 0 ? 'None' : `${m}"`}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.toggleRow}>
-                  <View>
-                    <Text style={styles.settingLabel}>Include Metadata</Text>
-                    <Text style={styles.settingDesc}>Add page numbers and creation date.</Text>
-                  </View>
-                  <Switch
-                    value={includeMetadata}
-                    onValueChange={setIncludeMetadata}
-                    trackColor={{ false: '#D1D1D6', true: Theme.colors.ocean[500] }}
-                  />
-                </View>
-              </Card>
-            )}
-
+            {/* Layout & PDF Settings */}
             <Card style={styles.settingsCard} padding="lg">
-              <Text style={styles.sectionTitle}>Security & Annotation</Text>
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Page Size</Text>
+                <View style={styles.optionsWrapper}>
+                  {(['A4', 'Letter', 'Legal'] as const).map(size => (
+                    <TouchableOpacity
+                      key={size}
+                      style={[styles.optionBtn, pageSize === size && styles.optionBtnActive]}
+                      onPress={() => setPageSize(size)}
+                    >
+                      <Text style={[styles.optionText, pageSize === size && styles.optionTextActive]}>{size}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
+              <View style={styles.settingRow}>
+                <Text style={styles.settingLabel}>Image Quality</Text>
+                <View style={styles.optionsWrapper}>
+                  {(['low', 'medium', 'high'] as const).map(q => (
+                    <TouchableOpacity
+                      key={q}
+                      style={[styles.optionBtn, quality === q && styles.optionBtnActive]}
+                      onPress={() => setQuality(q)}
+                    >
+                      <Text style={[styles.optionText, quality === q && styles.optionTextActive]}>
+                        {q.charAt(0).toUpperCase() + q.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </Card>
+
+            {/* Extra Options */}
+            <Card style={styles.settingsCard} padding="lg">
               <View style={styles.inputContainer}>
-                <Text style={styles.settingLabel}>Document Watermark</Text>
+                <Text style={styles.settingLabel}>Watermark</Text>
                 <TextInput
-                  placeholder="Draft / Confidential / Company Name"
+                  placeholder="e.g. CONFIDENTIAL"
                   value={watermark}
                   onChangeText={setWatermark}
                   style={styles.textInput}
@@ -384,19 +310,18 @@ export const ExportScreen: React.FC = () => {
                 />
               </View>
 
-              {exportFormat === 'pdf' && (
-                <View style={[styles.toggleRow, { marginTop: Theme.spacing.lg, paddingTop: Theme.spacing.md, borderTopWidth: 1, borderTopColor: Theme.colors.border.light }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.settingLabel}>Password Protect PDF</Text>
-                    <Text style={styles.settingDesc}>Encrypt file with secure password.</Text>
-                  </View>
-                  <Switch
-                    value={encryptPdf}
-                    onValueChange={setEncryptPdf}
-                    trackColor={{ false: '#D1D1D6', true: Theme.colors.ocean[500] }}
-                  />
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>Password Protect</Text>
+                  <Text style={styles.settingDesc}>Require password to open (Simulated)</Text>
                 </View>
-              )}
+                <Switch
+                  value={encryptPdf}
+                  onValueChange={setEncryptPdf}
+                  trackColor={{ false: Theme.colors.border.main, true: `${Theme.colors.ocean[500]}80` }}
+                  thumbColor={encryptPdf ? Theme.colors.ocean[500] : '#f4f3f4'}
+                />
+              </View>
 
               {encryptPdf && exportFormat === 'pdf' && (
                 <View style={[styles.inputContainer, { marginTop: Theme.spacing.md }]}>
@@ -446,15 +371,6 @@ export const ExportScreen: React.FC = () => {
                   ))}
                 </View>
 
-                <View style={styles.compressInfo}>
-                  <Ionicons name="information-circle-outline" size={14} color={Theme.colors.text.muted} />
-                  <Text style={styles.compressInfoText}>
-                    {compressLevel === 'low' ? 'Low: ~15–25% smaller, minimal quality loss'
-                      : compressLevel === 'medium' ? 'Medium: ~40–55% smaller, good quality balance'
-                      : 'High: ~60–75% smaller, visible quality reduction'}
-                  </Text>
-                </View>
-
                 {compressResult && (
                   <View style={styles.compressResultRow}>
                     <Ionicons name="checkmark-circle" size={16} color={Theme.colors.status.success} />
@@ -494,39 +410,14 @@ export const ExportScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
-    </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Theme.colors.surface.primary,
-    paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Theme.spacing.md,
-    height: 56,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.colors.border.light,
-  },
-  backButton: {
-    padding: Theme.spacing.xs,
-  },
-  headerTitle: {
-    ...Theme.textStyles.h3,
-  },
   scrollContent: {
-    padding: Theme.spacing.lg,
+    padding: Theme.spacing.sm,
     paddingBottom: Theme.spacing.xxl,
-  },
-  largeContent: {
-    maxWidth: 700,
-    alignSelf: 'center',
-    paddingHorizontal: 0,
   },
   compressHeader: {
     flexDirection: 'row',
@@ -537,20 +428,6 @@ const styles = StyleSheet.create({
   compressIconBg: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-  },
-  compressInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Theme.spacing.xs,
-    marginTop: Theme.spacing.sm,
-    backgroundColor: Theme.colors.surface.tertiary,
-    borderRadius: Theme.borderRadius.sm,
-    padding: Theme.spacing.sm,
-  },
-  compressInfoText: {
-    ...Theme.textStyles.caption,
-    color: Theme.colors.text.secondary,
-    flex: 1,
   },
   compressResultRow: {
     flexDirection: 'row',
@@ -569,11 +446,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...Theme.textStyles.h3,
     marginBottom: Theme.spacing.md,
-  },
-  detailText: {
-    ...Theme.textStyles.body,
-    color: Theme.colors.text.secondary,
-    marginBottom: Theme.spacing.xs,
   },
   formatGrid: {
     flexDirection: 'row',
@@ -683,7 +555,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.text.secondary,
     marginTop: Theme.spacing.xs,
   },
-  // Success Container styles
   successContainer: {
     alignItems: 'center',
     paddingVertical: Theme.spacing.xl,
@@ -735,7 +606,7 @@ const styles = StyleSheet.create({
   },
   whatsappBtn: {
     flexDirection: 'row',
-    backgroundColor: '#25D366', // Brand WhatsApp green
+    backgroundColor: '#25D366',
     height: 50,
     borderRadius: Theme.borderRadius.sm,
     alignItems: 'center',

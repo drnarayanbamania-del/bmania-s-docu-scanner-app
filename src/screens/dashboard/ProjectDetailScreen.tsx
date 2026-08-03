@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../components/ui/Toast';
+import { ExportModal } from '../../components/modals/ExportModal';
 import { ScannedPage } from '../../types';
 
 export const ProjectDetailScreen: React.FC = () => {
@@ -14,6 +15,7 @@ export const ProjectDetailScreen: React.FC = () => {
   const { currentProject, scannedPages, deleteProject, deleteScannedPage, updateScannedPage, reorderPages, addScannedPages, clearCurrentProject } = useApp();
   const { showToast } = useToast();
   const { width: windowWidth } = useWindowDimensions();
+  const [exportModalVisible, setExportModalVisible] = useState(false);
   const [rotatingPageId, setRotatingPageId] = useState<string | null>(null);
 
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
@@ -27,7 +29,7 @@ export const ProjectDetailScreen: React.FC = () => {
   };
 
   const handleExport = () => {
-    navigation.navigate('Export');
+    setExportModalVisible(true);
   };
 
   const handleDeleteProject = () => {
@@ -287,6 +289,13 @@ export const ProjectDetailScreen: React.FC = () => {
           />
         </View>
       )}
+      
+      <ExportModal
+        visible={exportModalVisible}
+        onClose={() => setExportModalVisible(false)}
+        projectPages={projectPages}
+        projectTitle={currentProject.title}
+      />
     </View>
   );
 };

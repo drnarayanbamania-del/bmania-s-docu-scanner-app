@@ -78,7 +78,6 @@ const DashboardStack: React.FC = () => (
   <ProjectStack.Navigator screenOptions={{ headerShown: false }}>
     <ProjectStack.Screen name="Dashboard" component={DashboardScreen} />
     <ProjectStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
-    <ProjectStack.Screen name="Export" component={ExportScreen} />
   </ProjectStack.Navigator>
 );
 
@@ -107,7 +106,6 @@ const SettingsStack: React.FC = () => (
 // Screen components (lazy loaded)
 const DashboardScreen = React.lazy(() => import('../screens/dashboard/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
 const ProjectDetailScreen = React.lazy(() => import('../screens/dashboard/ProjectDetailScreen').then(m => ({ default: m.ProjectDetailScreen })));
-const ExportScreen = React.lazy(() => import('../screens/dashboard/ExportScreen').then(m => ({ default: m.ExportScreen })));
 const ScanScreen = React.lazy(() => import('../screens/scan/ScanScreen').then(m => ({ default: m.ScanScreen })));
 const CameraScreen = React.lazy(() => import('../screens/scan/CameraScreen').then(m => ({ default: m.CameraScreen })));
 const ReviewScreen = React.lazy(() => import('../screens/scan/ReviewScreen').then(m => ({ default: m.ReviewScreen })));

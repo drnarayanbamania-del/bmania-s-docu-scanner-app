@@ -23,6 +23,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import { Project, ScannedPage } from '../../types';
+import { ExportModal } from '../../components/modals/ExportModal';
 
 export const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -64,6 +65,12 @@ export const DashboardScreen: React.FC = () => {
   // ---------------------------------------------------------------------------
   const [protectModalVisible, setProtectModalVisible] = useState(false);
 
+  // ---------------------------------------------------------------------------
+  // Export Demo states
+  // ---------------------------------------------------------------------------
+  const [exportDemoVisible, setExportDemoVisible] = useState(false);
+  const [demoPages, setDemoPages] = useState<ScannedPage[]>([]);
+
   // Per-project page cache (so we don't re-fetch on every re-render)
   const [projectPagesCache, setProjectPagesCache] = useState<Record<string, any[]>>({});
 
@@ -81,6 +88,22 @@ export const DashboardScreen: React.FC = () => {
       setCurrentProject(newProj);
       navigation.navigate('Scan', { screen: 'Camera' });
     }
+  };
+
+  const handleExportDemo = () => {
+    // Generate a dummy scanned page for the demo
+    const dummyPage: ScannedPage = {
+      id: `demo_${Date.now()}`,
+      projectId: 'demo_proj',
+      originalUri: 'https://picsum.photos/800/1200', // Mock image
+      imageUri: 'https://picsum.photos/800/1200',
+      processedUri: 'https://picsum.photos/800/1200',
+      createdAt: new Date().toISOString(),
+      order: 0,
+      filters: { exposure: 0, contrast: 1, brightness: 1, saturation: 1, warmth: 0, clarity: 0, preset: 'color' }
+    };
+    setDemoPages([dummyPage]);
+    setExportDemoVisible(true);
   };
 
   const handleSelectProject = (project: Project) => {
@@ -297,6 +320,16 @@ export const DashboardScreen: React.FC = () => {
             leftIcon={<Ionicons name="camera" size={20} color={Theme.colors.text.inverse} />}
           >
             Start New Scan
+          </Button>
+
+          <Button
+            size="md"
+            variant="outline"
+            onPress={handleExportDemo}
+            style={{ marginTop: Theme.spacing.sm, borderColor: Theme.colors.ocean[500] }}
+            leftIcon={<Ionicons name="document-text-outline" size={20} color={Theme.colors.ocean[500]} />}
+          >
+            Export PDF Demo
           </Button>
         </Card>
 
@@ -676,6 +709,14 @@ export const DashboardScreen: React.FC = () => {
           Open Smallpdf.com Protect Tool
         </Button>
       </Modal>
+
+      {/* ===== EXPORT DEMO MODAL ===== */}
+      <ExportModal
+        visible={exportDemoVisible}
+        onClose={() => setExportDemoVisible(false)}
+        projectPages={demoPages}
+        projectTitle="Demo Document"
+      />
     </View>
   );
 };
