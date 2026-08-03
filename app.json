@@ -8,7 +8,14 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bamania.scanner"
+      "bundleIdentifier": "com.bamania.scanner",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Bamania's Scanner needs camera access to scan documents.",
+        "NSPhotoLibraryUsageDescription": "Bamania's Scanner needs photo library access to import and save scanned documents.",
+        "NSPhotoLibraryAddUsageDescription": "Bamania's Scanner needs permission to save scanned documents to your photo library.",
+        "NSMicrophoneUsageDescription": "Microphone access is required by the camera framework.",
+        "NSDocumentsFolderUsageDescription": "Bamania's Scanner needs access to your documents folder to save and share PDFs."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,13 +23,48 @@
         "foregroundImage": "./assets/logo.png"
       },
       "package": "com.bamania.scanner",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.MANAGE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/logo.png",
       "name": "Bamania's Scanner",
       "shortName": "BamScan",
       "description": "Bamania's Scanner - Scan, enhance and export documents to PDF instantly"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Bamania's Scanner needs camera access to scan documents."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Bamania's Scanner needs photo library access to import images.",
+          "cameraPermission": "Bamania's Scanner needs camera access to scan documents."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Bamania's Scanner needs access to save scanned documents to your gallery.",
+          "savePhotosPermission": "Bamania's Scanner needs permission to save PDFs to your gallery.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
   }
 }
+
