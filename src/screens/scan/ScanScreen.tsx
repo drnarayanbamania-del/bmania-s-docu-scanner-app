@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../components/ui/Toast';
+import { DEFAULT_FILTERS } from '../../types';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -54,6 +55,7 @@ export const ScanScreen: React.FC = () => {
           originalUri: asset.uri,
           imageUri: asset.uri,
           order: index,
+          filters: DEFAULT_FILTERS,
         }));
 
         await addScannedPages(proj.id, pages);
@@ -81,6 +83,7 @@ export const ScanScreen: React.FC = () => {
           originalUri: asset.uri,
           imageUri: asset.uri,
           order: index,
+          filters: DEFAULT_FILTERS,
         }));
 
         await addScannedPages(proj.id, pages);

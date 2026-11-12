@@ -54,7 +54,7 @@ export const storage = {
     const projects = await this.getProjects();
     const index = projects.findIndex((p: unknown) => (p as { id: string }).id === projectId);
     if (index !== -1) {
-      projects[index] = { ...projects[index], ...updates };
+      projects[index] = { ...(projects[index] as Record<string, unknown>), ...(updates as Record<string, unknown>) };
       await this.setProjects(projects);
     }
   },
@@ -84,6 +84,7 @@ export const storage = {
   },
 
   async clearAll(): Promise<void> {
-    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+    // AsyncStorage v3 dropped multiRemove
+    await Promise.all(Object.values(STORAGE_KEYS).map(key => AsyncStorage.removeItem(key)));
   },
 };

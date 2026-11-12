@@ -174,7 +174,7 @@ class FirebaseService {
   }
 
   // Scanned Pages
-  async createScannedPage(projectId: string, pageData: unknown): Promise<{ page: unknown | null; error: Error | null }> {
+  async createScannedPage(projectId: string, pageData: Record<string, unknown>): Promise<{ page: unknown | null; error: Error | null }> {
     try {
       const docRef = await addDoc(collection(this.getDb(), 'scanned_pages'), {
         projectId,
@@ -202,9 +202,9 @@ class FirebaseService {
     }
   }
 
-  async updateScannedPage(pageId: string, updates: unknown): Promise<Error | null> {
+  async updateScannedPage(pageId: string, updates: Record<string, unknown>): Promise<Error | null> {
     try {
-      await updateDoc(doc(this.getDb(), 'scanned_pages', pageId), updates);
+      await updateDoc(doc(this.getDb(), 'scanned_pages', pageId), updates as Record<string, any>);
       return null;
     } catch (error) {
       return error as Error;

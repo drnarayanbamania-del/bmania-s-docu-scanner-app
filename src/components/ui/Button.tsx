@@ -1,8 +1,8 @@
 import React, { forwardRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, type TouchableOpacityProps } from 'react-native';
 import { Theme } from '../../constants/theme';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<TouchableOpacityProps, 'children'> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg' | 'xl';
   fullWidth?: boolean;
@@ -10,11 +10,24 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   children: React.ReactNode;
-  onPress?: () => void;
-  disabled?: boolean;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+const textColorByVariant = {
+  primary: 'textPrimary',
+  secondary: 'textSecondary',
+  outline: 'textOutline',
+  ghost: 'textGhost',
+  danger: 'textDanger',
+} as const;
+
+const textSizeBySize = {
+  sm: 'textSm',
+  md: 'textMd',
+  lg: 'textLg',
+  xl: 'textXl',
+} as const;
+
+export const Button = forwardRef<React.ElementRef<typeof TouchableOpacity>, ButtonProps>(
   (
     {
       variant = 'primary',
@@ -59,8 +72,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
             <Text style={[
               styles.text,
-              styles[`text${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
-              styles[`text${size.charAt(0).toUpperCase() + size.slice(1)}`],
+              styles[textColorByVariant[variant]],
+              styles[textSizeBySize[size]],
             ]}>
               {children}
             </Text>

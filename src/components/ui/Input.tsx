@@ -1,8 +1,8 @@
 import React, { forwardRef } from 'react';
-import { View, TextInput, StyleSheet, Text } from 'react-native';
+import { View, TextInput, StyleSheet, Text, TouchableOpacity, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { Theme } from '../../constants/theme';
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -10,9 +10,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   rightIcon?: React.ReactNode;
   secureTextEntry?: boolean;
   onToggleSecure?: () => void;
+  /** Style for the surrounding field container (the input itself uses `inputStyle`). */
+  style?: StyleProp<ViewStyle>;
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
+export const Input = forwardRef<TextInput, InputProps>(
   (
     {
       label,
@@ -38,23 +40,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <View style={[
           styles.inputWrapper,
           hasError && styles.inputWrapperError,
-          leftIcon && styles.hasLeftIcon,
-          rightIcon && styles.hasRightIcon,
+          leftIcon ? styles.hasLeftIcon : undefined,
+          rightIcon ? styles.hasRightIcon : undefined,
         ]}>
           {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
           <TextInput
             ref={ref}
             style={[
               styles.input,
-              secureTextEntry && leftIcon && styles.inputWithIcon,
+              secureTextEntry && leftIcon ? styles.inputWithIcon : undefined,
             ]}
             secureTextEntry={secureTextEntry}
             {...props}
           />
           {rightIcon && (
-            <View style={styles.iconRight}>
-              {typeof rightIcon === 'function' ? rightIcon({ secureTextEntry, onToggleSecure }) : rightIcon}
-            </View>
+            <View style={styles.iconRight}>{rightIcon}</View>
           )}
           {secureTextEntry && onToggleSecure && (
             <View style={styles.iconRight}>
@@ -80,8 +80,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 );
 
 Input.displayName = 'Input';
-
-import { TouchableOpacity } from 'react-native';
 
 const styles = StyleSheet.create({
   container: {

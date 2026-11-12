@@ -2,13 +2,14 @@ import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Image, Platform, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../../constants/theme';
+import { Theme, AbsoluteFill } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { useCamera } from '../../hooks/useCamera';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../components/ui/Toast';
+import { DEFAULT_FILTERS } from '../../types';
 
 export const CameraScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -38,7 +39,7 @@ export const CameraScreen: React.FC = () => {
 
   // Auto-capture simulation logic
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (captureMode === 'auto' && !isProcessing) {
       setAutoCaptureCountdown(3);
       const countdownInterval = setInterval(() => {
@@ -151,6 +152,7 @@ export const CameraScreen: React.FC = () => {
         imageUri: uri,
         processedUri: uri,
         order: (proj?.pageCount || 0) + idx,
+        filters: DEFAULT_FILTERS,
       }));
 
       await addScannedPages(proj.id, newPages);
@@ -294,7 +296,7 @@ export const CameraScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <CameraView
-        style={StyleSheet.absoluteFillObject}
+        style={AbsoluteFill}
         ref={cameraRef}
         facing={facing}
         flash={flash === 'on' ? 'on' : flash === 'off' ? 'off' : 'auto'}
@@ -435,8 +437,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   countdownOverlayText: {
-    color: '#FFF',
     ...Theme.textStyles.h2,
+    color: '#FFF',
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: Theme.spacing.md,
     paddingVertical: Theme.spacing.xs,
@@ -522,8 +524,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2C2C2E',
   },
   webTitle: {
-    color: '#FFF',
     ...Theme.textStyles.bodyLarge,
+    color: '#FFF',
     fontFamily: Theme.typography.fontFamilies.bold,
   },
   viewfinderMock: {

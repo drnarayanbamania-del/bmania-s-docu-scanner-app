@@ -1,6 +1,6 @@
-import { Theme } from '../constants/theme';
+import { Theme, type ThemeType } from '../constants/theme';
 
-export const getTheme = (): Theme => Theme;
+export const getTheme = (): ThemeType => Theme;
 
 export const formatDate = (date: string | Date): string => {
   const d = new Date(date);
@@ -30,7 +30,7 @@ export const debounce = <T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): ((...args: Parameters<T>) => void) => {
-  let timeout: NodeJS.Timeout | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
   return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
@@ -57,6 +57,35 @@ export const clamp = (value: number, min: number, max: number): number => {
 
 export const lerp = (start: number, end: number, factor: number): number => {
   return start + (end - start) * factor;
+};
+
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Encodes raw bytes as a base64 string.
+ * Needed because expo-file-system's writeAsStringAsync only accepts strings, even when
+ * the file content is binary (written with encoding: Base64).
+ */
+export const bytesToBase64 = (bytes: Uint8Array): string => {
+  const chunks: string[] = [];
+  let current = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const hasB1 = i + 1 < bytes.length;
+    const hasB2 = i + 2 < bytes.length;
+    const b1 = hasB1 ? bytes[i + 1] : 0;
+    const b2 = hasB2 ? bytes[i + 2] : 0;
+    current += BASE64_CHARS[b0 >> 2];
+    current += BASE64_CHARS[((b0 & 0x03) << 4) | (b1 >> 4)];
+    current += hasB1 ? BASE64_CHARS[((b1 & 0x0f) << 2) | (b2 >> 6)] : '=';
+    current += hasB2 ? BASE64_CHARS[b2 & 0x3f] : '=';
+    if (current.length >= 0x8000) {
+      chunks.push(current);
+      current = '';
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.join('');
 };
 
 export const getFileExtension = (filename: string): string => {

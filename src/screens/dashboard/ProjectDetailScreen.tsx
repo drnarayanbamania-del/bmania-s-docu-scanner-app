@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Text, FlatList, Image, TouchableOpacity, Alert, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../../constants/theme';
+import { Theme, AbsoluteFill } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useApp } from '../../context/AppContext';
@@ -120,6 +120,7 @@ export const ProjectDetailScreen: React.FC = () => {
         imageUri: page.imageUri,
         processedUri: page.processedUri,
         order: projectPages.length,
+        filters: page.filters,
       };
       if (currentProject) {
         await addScannedPages(currentProject.id, [duplicate]);
@@ -198,7 +199,7 @@ export const ProjectDetailScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.smallActionBtn}
             onPress={() => handleRotatePage(item)}
-            title="Rotate 90"
+            accessibilityLabel="Rotate 90"
           >
             <Ionicons name="refresh" size={16} color={Theme.colors.ocean[500]} />
             <Text style={styles.actionLabel}>Rotate</Text>
@@ -207,7 +208,7 @@ export const ProjectDetailScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.smallActionBtn}
             onPress={() => handleDuplicatePage(item)}
-            title="Duplicate"
+            accessibilityLabel="Duplicate"
           >
             <Ionicons name="copy-outline" size={16} color={Theme.colors.accent.teal} />
             <Text style={styles.actionLabel}>Copy</Text>
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   cardLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...AbsoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',

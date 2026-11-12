@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 import { shareAsync } from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { ScannedPage, PDFExportOptions } from '../types';
-import { generateId } from '../utils/helpers';
+import { generateId, bytesToBase64 } from '../utils/helpers';
 
 // Extend PDFExportOptions locally to include optional fields
 interface ExtendedPDFExportOptions extends PDFExportOptions {
@@ -155,6 +155,18 @@ export const usePDFGenerator = () => {
         setProgress(((i + 1) / pages.length) * 100);
       }
 
+      // Guarantee a valid document even if none of the page images could be read
+      if (pdfDoc.getPageCount() === 0) {
+        const placeholder = pdfDoc.addPage([pageSize.width, pageSize.height]);
+        placeholder.drawText('No page image could be loaded for this export.', {
+          x: margin,
+          y: pageSize.height / 2,
+          size: 14,
+          font,
+          color: rgb(0.4, 0.4, 0.4),
+        });
+      }
+
       // Add metadata header if enabled
       if (options.includeMetadata && pages.length > 0) {
         const firstPage = pdfDoc.getPage(0);
@@ -170,7 +182,7 @@ export const usePDFGenerator = () => {
       // Save PDF
       if (Platform.OS === 'web') {
         const pdfBytes = await pdfDoc.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         
         const link = document.createElement('a');
@@ -190,10 +202,10 @@ export const usePDFGenerator = () => {
 
       const fileName = `scan_${generateId()}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(fileUri, pdfBytes, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(pdfBytes), { encoding: FileSystem.EncodingType.Base64 });
       
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      const size = fileInfo.size || 0;
+      const size = fileInfo.exists ? fileInfo.size : 0;
 
       setIsGenerating(false);
       setProgress(100);
@@ -345,7 +357,7 @@ export const usePDFGenerator = () => {
 
       if (Platform.OS === 'web') {
         const pdfBytes = await pdfDoc.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
         const url  = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -360,9 +372,9 @@ export const usePDFGenerator = () => {
       const pdfBytes  = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
       const fileName  = `compressed_${generateId()}.pdf`;
       const fileUri   = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(fileUri, pdfBytes, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(pdfBytes), { encoding: FileSystem.EncodingType.Base64 });
       const fileInfo  = await FileSystem.getInfoAsync(fileUri);
-      const size = (fileInfo as any).size || 0;
+      const size = fileInfo.exists ? fileInfo.size : 0;
       setIsGenerating(false);
       setProgress(100);
       return { uri: fileUri, size, savedBytes: 0 };

@@ -22,7 +22,7 @@ import { Modal } from '../../components/ui/Modal';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
-import { Project, ScannedPage } from '../../types';
+import { Project, ScannedPage, DEFAULT_FILTERS } from '../../types';
 import { ExportModal } from '../../components/modals/ExportModal';
 
 export const DashboardScreen: React.FC = () => {
@@ -91,16 +91,19 @@ export const DashboardScreen: React.FC = () => {
   };
 
   const handleExportDemo = () => {
-    // Generate a dummy scanned page for the demo
+    // Use the bundled logo so the demo works offline instead of relying on a remote image
+    const demoImageUri = Platform.OS === 'web'
+      ? (typeof LOGO === 'string' ? LOGO : (LOGO as any)?.uri ?? '')
+      : Image.resolveAssetSource(LOGO)?.uri ?? '';
     const dummyPage: ScannedPage = {
       id: `demo_${Date.now()}`,
       projectId: 'demo_proj',
-      originalUri: 'https://picsum.photos/800/1200', // Mock image
-      imageUri: 'https://picsum.photos/800/1200',
-      processedUri: 'https://picsum.photos/800/1200',
+      originalUri: demoImageUri,
+      imageUri: demoImageUri,
+      processedUri: demoImageUri,
       createdAt: new Date().toISOString(),
       order: 0,
-      filters: { exposure: 0, contrast: 1, brightness: 1, saturation: 1, warmth: 0, clarity: 0, preset: 'color' }
+      filters: { ...DEFAULT_FILTERS, preset: 'color' }
     };
     setDemoPages([dummyPage]);
     setExportDemoVisible(true);

@@ -11,11 +11,20 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../../constants/theme';
+import { Theme, AbsoluteFill } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { useImageFilters } from '../../hooks/useImageFilters';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../components/ui/Toast';
+import type { CSSProperties } from 'react';
+
+// Rendered as a plain HTML range input on web, where accentColor is valid CSS
+const htmlSlider: CSSProperties = {
+  width: '100%',
+  height: 6,
+  borderRadius: 3,
+  accentColor: Theme.colors.ocean[500],
+};
 
 const PRESETS = [
   { id: 'original',  name: 'Original',  icon: 'image-outline'         },
@@ -211,7 +220,7 @@ export const EditScreen: React.FC = () => {
                     step={slider.step}
                     value={slider.value}
                     onChange={e => slider.set(parseFloat(e.target.value))}
-                    style={styles.htmlSlider as any}
+                    style={htmlSlider}
                   />
                 </View>
               ))}
@@ -263,13 +272,13 @@ const styles = StyleSheet.create({
   },
   previewImage: { width: '100%', height: '100%' },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...AbsoluteFill,
     backgroundColor: 'rgba(0,0,0,0.62)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
   },
-  processingText: { color: '#FFF', ...Theme.textStyles.body, marginTop: Theme.spacing.sm },
+  processingText: { ...Theme.textStyles.body, color: '#FFF', marginTop: Theme.spacing.sm },
   tabsRow: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -343,12 +352,6 @@ const styles = StyleSheet.create({
     fontFamily: Theme.typography.fontFamilies.bold,
     minWidth: 44,
     textAlign: 'right',
-  },
-  htmlSlider: {
-    width: '100%',
-    height: 6,
-    borderRadius: 3,
-    accentColor: Theme.colors.ocean[500],
   },
   footer: {
     padding: Theme.spacing.md,

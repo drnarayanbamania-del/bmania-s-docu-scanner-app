@@ -12,11 +12,21 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Theme } from '../../constants/theme';
+import { Theme, AbsoluteFill } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { useImageFilters } from '../../hooks/useImageFilters';
 import { useApp } from '../../context/AppContext';
 import { useToast } from '../../components/ui/Toast';
+import { DEFAULT_FILTERS } from '../../types';
+import type { CSSProperties } from 'react';
+
+// Rendered as a plain HTML range input on web, where accentColor is valid CSS
+const htmlSlider: CSSProperties = {
+  width: '100%',
+  height: 6,
+  borderRadius: 3,
+  accentColor: Theme.colors.ocean[500],
+};
 
 interface Point {
   x: number;
@@ -103,6 +113,7 @@ export const ReviewScreen: React.FC = () => {
         imageUri: previewUri,
         processedUri: previewUri,
         order: proj.pageCount || 0,
+        filters: DEFAULT_FILTERS,
       }]);
       showToast('Page added to document!', 'success');
       navigation.replace('Main', {
@@ -142,7 +153,7 @@ export const ReviewScreen: React.FC = () => {
   const handleApplyCrop = async () => {
     setIsProcessingLocal(true);
     try {
-      const img = new Image();
+      const img = document.createElement('img');
       img.crossOrigin = 'anonymous';
       img.src = previewUri;
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
@@ -325,7 +336,7 @@ export const ReviewScreen: React.FC = () => {
                       type="range" min="-1" max="1" step="0.05"
                       value={exposure}
                       onChange={e => setExposure(parseFloat(e.target.value))}
-                      style={styles.htmlSlider as any}
+                      style={htmlSlider}
                     />
                   </View>
 
@@ -340,7 +351,7 @@ export const ReviewScreen: React.FC = () => {
                       type="range" min="-1" max="1" step="0.05"
                       value={brightness}
                       onChange={e => setBrightness(parseFloat(e.target.value))}
-                      style={styles.htmlSlider as any}
+                      style={htmlSlider}
                     />
                   </View>
 
@@ -355,7 +366,7 @@ export const ReviewScreen: React.FC = () => {
                       type="range" min="-1" max="1" step="0.05"
                       value={contrast}
                       onChange={e => setContrast(parseFloat(e.target.value))}
-                      style={styles.htmlSlider as any}
+                      style={htmlSlider}
                     />
                   </View>
 
@@ -370,7 +381,7 @@ export const ReviewScreen: React.FC = () => {
                       type="range" min="0" max="1" step="0.05"
                       value={clarity}
                       onChange={e => setClarity(parseFloat(e.target.value))}
-                      style={styles.htmlSlider as any}
+                      style={htmlSlider}
                     />
                   </View>
 
@@ -385,7 +396,7 @@ export const ReviewScreen: React.FC = () => {
                       type="range" min="0" max="2" step="0.1"
                       value={saturation}
                       onChange={e => setSaturation(parseFloat(e.target.value))}
-                      style={styles.htmlSlider as any}
+                      style={htmlSlider}
                     />
                   </View>
                 </View>
@@ -453,15 +464,15 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
   },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...AbsoluteFill,
     backgroundColor: 'rgba(0,0,0,0.62)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 200,
   },
   processingText: {
-    color: '#FFF',
     ...Theme.textStyles.body,
+    color: '#FFF',
     marginTop: Theme.spacing.md,
   },
   tabsRow: {
@@ -541,12 +552,6 @@ const styles = StyleSheet.create({
     fontFamily: Theme.typography.fontFamilies.bold,
     minWidth: 44,
     textAlign: 'right',
-  },
-  htmlSlider: {
-    width: '100%',
-    height: 6,
-    borderRadius: 3,
-    accentColor: Theme.colors.ocean[500],
   },
   cropActionsRow: {
     flexDirection: 'row',

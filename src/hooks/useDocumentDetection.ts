@@ -21,7 +21,7 @@ export const useDocumentDetection = () => {
     
     try {
       // Load image
-      const img = new Image();
+      const img = document.createElement('img');
       img.src = imageUri;
       await new Promise((resolve, reject) => {
         img.onload = resolve;
@@ -201,7 +201,7 @@ export const useDocumentDetection = () => {
     outputHeight: number
   ): Promise<string | null> => {
     try {
-      const img = new Image();
+      const img = document.createElement('img');
       img.src = imageUri;
       await new Promise((resolve, reject) => {
         img.onload = resolve;

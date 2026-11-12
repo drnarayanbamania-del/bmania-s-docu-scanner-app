@@ -22,7 +22,8 @@ export const SettingsScreen: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      const { error } = await signOut();
+      if (error) throw error;
       showToast('Signed out successfully', 'info');
     } catch (e) {
       console.error(e);

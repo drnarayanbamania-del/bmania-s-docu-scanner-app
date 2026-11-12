@@ -318,7 +318,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ visible, onClose, proj
                 <Switch
                   value={encryptPdf}
                   onValueChange={setEncryptPdf}
-                  trackColor={{ false: Theme.colors.border.main, true: `${Theme.colors.ocean[500]}80` }}
+                  trackColor={{ false: Theme.colors.border.medium, true: `${Theme.colors.ocean[500]}80` }}
                   thumbColor={encryptPdf ? Theme.colors.ocean[500] : '#f4f3f4'}
                 />
               </View>

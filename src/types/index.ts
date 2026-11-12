@@ -47,6 +47,20 @@ export interface FilterSettings {
   preset?: 'original' | 'color' | 'magic' | 'bw' | 'grayscale' | 'hd' | 'shadows' | 'noise' | 'clarity' | 'vivid';
 }
 
+/**
+ * Neutral filter settings used whenever a scanned page is created without explicit filters.
+ */
+export const DEFAULT_FILTERS: FilterSettings = {
+  brightness: 1,
+  contrast: 1,
+  saturation: 1,
+  exposure: 0,
+  clarity: 0,
+  grayscale: false,
+  autoEnhance: false,
+  preset: 'original',
+};
+
 export interface PDFExportOptions {
   pageSize: 'A4' | 'Letter' | 'Legal';
   margin: number;

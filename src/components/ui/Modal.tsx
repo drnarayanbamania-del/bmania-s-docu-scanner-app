@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Modal as RNModal, Animated, TouchableOpacity, Platform, BackHandler, Text, useWindowDimensions } from 'react-native';
-import { Theme } from '../../constants/theme';
+import { Theme, AbsoluteFill } from '../../constants/theme';
 
 interface ModalProps {
   visible: boolean;
@@ -24,12 +24,14 @@ export const Modal: React.FC<ModalProps> = ({
   animationType = 'slide',
 }) => {
   const [anim] = useState(() => new Animated.Value(0));
+  const [rendered, setRendered] = useState(visible);
   const { width: windowWidth } = useWindowDimensions();
 
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
   useEffect(() => {
     if (visible) {
+      setRendered(true);
       Animated.timing(anim, {
         toValue: 1,
         duration: animationType === 'none' ? 0 : 250,
@@ -40,7 +42,10 @@ export const Modal: React.FC<ModalProps> = ({
         toValue: 0,
         duration: animationType === 'none' ? 0 : 200,
         useNativeDriver: true,
-      }).start();
+      }).start(({ finished }) => {
+        // Unmount only after the close animation, so it can play out
+        if (finished) setRendered(false);
+      });
     }
   }, [visible, anim, animationType]);
 
@@ -55,7 +60,7 @@ export const Modal: React.FC<ModalProps> = ({
     return () => subscription.remove();
   }, [visible, onClose]);
 
-  if (!visible && anim._value === 0) return null;
+  if (!rendered) return null;
 
   const mobileSizes = {
     sm: '85%',
@@ -63,7 +68,7 @@ export const Modal: React.FC<ModalProps> = ({
     lg: '95%',
     xl: '98%',
     full: '100%',
-  };
+  } as const;
 
   const webSizes = {
     sm: 420,
@@ -71,30 +76,35 @@ export const Modal: React.FC<ModalProps> = ({
     lg: 720,
     xl: 900,
     full: '100%',
-  };
+  } as const;
 
   const overlayOpacity = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 0.6],
   });
 
-  const slideTranslate = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Platform.OS === 'ios' ? 50 : (isLargeScreen ? 20 : '100%'), 0],
-  });
+  // Every entry in an interpolation's outputRange must share the same unit: mixing a
+  // percentage with a plain number throws on react-native-web ("invalid pattern").
+  const slideTranslate = anim.interpolate(
+    Platform.OS === 'ios'
+      ? { inputRange: [0, 1], outputRange: [50, 0] }
+      : isLargeScreen
+        ? { inputRange: [0, 1], outputRange: [20, 0] }
+        : { inputRange: [0, 1], outputRange: ['100%', '0%'] }
+  );
 
   const fadeOpacity = anim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
 
-  const modalStyle = animationType === 'slide'
-    ? { transform: [{ translateY: slideTranslate }], opacity: fadeOpacity }
-    : { opacity: fadeOpacity };
-
-  const containerStyle = isLargeScreen
-    ? [styles.containerWeb, { width: webSizes[size] }, modalStyle]
-    : [styles.containerMobile, { width: mobileSizes[size] }, modalStyle];
+  const containerStyle = [
+    isLargeScreen ? styles.containerWeb : styles.containerMobile,
+    { width: isLargeScreen ? webSizes[size] : mobileSizes[size] },
+    animationType === 'slide'
+      ? { transform: [{ translateY: slideTranslate }], opacity: fadeOpacity }
+      : { opacity: fadeOpacity },
+  ];
 
   return (
     <RNModal
@@ -112,7 +122,7 @@ export const Modal: React.FC<ModalProps> = ({
       >
         {/* Overlay background tap to close */}
         <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
+          style={AbsoluteFill}
           activeOpacity={1}
           onPress={closeOnOverlayPress ? onClose : undefined}
         />

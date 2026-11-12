@@ -9,9 +9,9 @@ const AUTH_PROVIDER: AuthProviderType = 'supabase';
 interface AuthContextType extends AuthState {
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<Error | null>;
-  resetPassword: (email: string) => Promise<Error | null>;
-  updateProfile: (data: { name?: string; avatarUrl?: string }) => Promise<Error | null>;
+  signOut: () => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  updateProfile: (data: { name?: string; avatarUrl?: string }) => Promise<{ error: Error | null }>;
   refreshSession: () => Promise<void>;
 }
 

@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -119,8 +119,8 @@ export class LocalFileService {
   async getFileSize(uri: string): Promise<number> {
     if (Platform.OS === 'web') return 0;
     try {
-      const info = await FileSystem.getInfoAsync(uri, { size: true });
-      return info.exists && 'size' in info ? (info.size ?? 0) : 0;
+      const info = await FileSystem.getInfoAsync(uri);
+      return info.exists ? info.size : 0;
     } catch {
       return 0;
     }
@@ -177,13 +177,13 @@ export class LocalFileService {
         const items = await FileSystem.readDirectoryAsync(dir);
         for (const item of items) {
           const fullPath = `${dir}${item}`;
-          const itemInfo = await FileSystem.getInfoAsync(fullPath, { size: true });
+          const itemInfo = await FileSystem.getInfoAsync(fullPath);
           if (itemInfo.exists) {
-            if ('size' in itemInfo && typeof itemInfo.size === 'number') {
-              totalBytes += itemInfo.size;
-            } else {
+            if (itemInfo.isDirectory) {
               // It's a directory — recurse
               try { await walk(`${fullPath}/`); } catch {}
+            } else {
+              totalBytes += itemInfo.size;
             }
           }
         }
