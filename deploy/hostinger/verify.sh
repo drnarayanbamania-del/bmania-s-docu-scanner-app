@@ -3,18 +3,64 @@
 #
 #   deploy/hostinger/verify.sh https://your-domain.com
 #   deploy/hostinger/verify.sh https://domain.com/scanner
+#   deploy/hostinger/verify.sh your-domain.com        # https assumed
+#
+# Anything without a real host ("https://", a bare word) is rejected with the
+# expected format instead of being sent as a broken request.
 #
 # Checks the shell, the JS bundle it references, the APK download, the SPA
 # fallback that .htaccess provides, and caching on hashed assets. Exits non-zero
 # if anything fails.
 set -uo pipefail
 
-base="${1:-}"
-if [ -z "$base" ]; then
-  echo "usage: deploy/hostinger/verify.sh https://your-domain.com" >&2
+usage_error() {
+  # $1 is what arrived, $2 says what is wrong with it.
+  {
+    echo "Argument not usable: $1"
+    echo "$2"
+    echo ""
+    echo "Give the full address of the deployed site, including the scheme:"
+    echo "  deploy/hostinger/verify.sh https://scan.bamania.in"
+    echo "  deploy/hostinger/verify.sh https://example.com/scanner"
+    echo ""
+    echo "Accepts http:// or https://, a real host such as example.com or a"
+    echo "subdomain, and an optional path when the app lives in a subfolder."
+  } >&2
   exit 2
+}
+
+base="${1:-}"
+# Tolerate whitespace around a pasted URL, but not inside it.
+base="$(printf '%s' "$base" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [ -z "$base" ]; then
+  usage_error "(nothing)" "No URL given."
+fi
+case "$base" in
+  *[[:space:]]*) usage_error "$base" "The URL contains a space, so it is not a single address." ;;
+esac
+
+# A bare host such as scan.bamania.in is fine; assume https for it.
+case "$base" in
+  http://*|https://*) ;;
+  *"://"*) usage_error "$base" "Only http:// and https:// are supported." ;;
+  *.*) base="https://$base" ;;
+  *) usage_error "$base" "That is not a URL - it has no scheme and no domain." ;;
+esac
+
+hostport="${base#*://}"
+hostport="${hostport%%/*}"
+host="${hostport%%:*}"
+if [ -z "$host" ]; then
+  usage_error "$base" "The URL has no host, so there is nothing to connect to."
 fi
 base="${base%/}"
+case "$host" in
+  *[!A-Za-z0-9.:-]*) usage_error "$base" "The host '$host' contains characters a hostname cannot have." ;;
+esac
+case "$host" in
+  localhost|*.*|*:*) ;;
+  *) usage_error "$base" "The host '$host' is not a domain name (missing a dot)." ;;
+esac
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 
@@ -38,10 +84,6 @@ probe() {
     printf '%s' "$out"
   fi
 }
-
-hostport="${base#*://}"
-hostport="${hostport%%/*}"
-host="${hostport%%:*}"
 
 # 0. Does the name resolve at all? A missing DNS record is a completely
 # different fix from a broken server, so report it on its own and stop.
