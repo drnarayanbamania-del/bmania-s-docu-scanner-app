@@ -34,7 +34,10 @@ version="${version:-$app_version}"
 tag="v$version"
 apk="artifacts/release/bamanias-scanner-$version.apk"
 notes="deploy/release-notes/v$version.md"
-[ -f "$notes" ] || notes="deploy/release-notes/$version.md"
+# Older notes files may lack the "v" prefix; prefer them when present.
+if [ ! -f "$notes" ] && [ -f "deploy/release-notes/$version.md" ]; then
+  notes="deploy/release-notes/$version.md"
+fi
 title="Bamania's Scanner $version"
 
 run() {
@@ -52,9 +55,18 @@ if [ ! -f "$apk" ]; then
   exit 1
 fi
 
+# The body always comes from a file, so draft one instead of failing when a
+# version was released without notes (for example from an older checkout).
 if [ ! -f "$notes" ]; then
-  echo "Missing $notes - the release body comes from this file." >&2
-  exit 1
+  echo "No release notes for $version - drafting them from git history." >&2
+  if [ -n "$dry_run" ]; then
+    echo "would write: $notes (deploy/release-notes.sh $version $apk)"
+  else
+    notes="deploy/release-notes/v$version.md"
+    mkdir -p deploy/release-notes
+    deploy/release-notes.sh "$version" "$apk" > "$notes"
+    echo "Wrote $notes - edit the summary if you want a richer body." >&2
+  fi
 fi
 
 if [ "$version" != "$app_version" ]; then

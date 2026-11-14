@@ -74,6 +74,16 @@ git checkout -- package.json 2>/dev/null || true
 # ── Build both artifacts ─────────────────────────────────────────────────────
 deploy/android/build-apk.sh
 apk="artifacts/release/bamanias-scanner-$next.apk"
+
+# Every release needs release notes, so draft them from the commits when the
+# file is missing; the summary at the top is meant to be rewritten by hand.
+notes="deploy/release-notes/v$next.md"
+if [ ! -f "$notes" ]; then
+  mkdir -p deploy/release-notes
+  deploy/release-notes.sh "$next" "$apk" > "$notes"
+  echo "Drafted release notes: $notes (edit the summary before publishing)"
+fi
+
 deploy/hostinger/build.sh "$apk"
 
 # ── Report what was produced ─────────────────────────────────────────────────
@@ -95,6 +105,7 @@ cat <<EOF
 
 Done.
   APK:      $apk
+  Notes:    $notes
   Hostinger: artifacts/hostinger/bamanias-scanner-web-$next.zip
 
 Next: upload the zip to Hostinger (public_html), replace the old APK there,

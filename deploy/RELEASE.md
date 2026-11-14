@@ -42,6 +42,10 @@ Outputs:
 If the build fails, `app.json` is already bumped — revert it with
 `git checkout -- app.json` before retrying.
 
+The script also drafts `deploy/release-notes/v<version>.md` from the commits
+since the previous tag when that file does not exist yet. The generated summary
+is a placeholder — rewrite the paragraph above `## Changes` before publishing.
+
 ## 3. Verify the artifacts
 
 - [ ] `aapt2 dump badging artifacts/release/bamanias-scanner-<version>.apk | head -1`
