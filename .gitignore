@@ -41,3 +41,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# release signing material
+/deploy/android/*.keystore
+/deploy/android/keystore.properties
+
+# build artifacts
+/artifacts
