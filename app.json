@@ -2,9 +2,9 @@
   "expo": {
     "name": "Bamania's Scanner",
     "slug": "bamanias-scanner",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -19,10 +19,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#7B2FBE",
-        "foregroundImage": "./assets/logo.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "package": "com.bamania.scanner",
+      "versionCode": 3,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
