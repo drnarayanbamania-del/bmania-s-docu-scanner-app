@@ -4,9 +4,14 @@ import { RootStackParamList } from '../types';
 
 export const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-export const RootStackNavigator: React.FC = () => {
+interface RootStackNavigatorProps {
+  initialRouteName?: keyof RootStackParamList;
+}
+
+export const RootStackNavigator: React.FC<RootStackNavigatorProps> = ({ initialRouteName = 'Onboarding' }) => {
   return (
     <RootStack.Navigator
+      initialRouteName={initialRouteName}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#FFFFFF' },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -11,10 +11,33 @@ import {
   Outfit_800ExtraBold,
   Outfit_900Black,
 } from '@expo-google-fonts/outfit';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AppProvider } from './src/context/AppContext';
 import { ToastProvider } from './src/components/ui/Toast';
 import { RootStackNavigator } from './src/navigation/RootNavigator';
+
+const RootNavigator: React.FC = () => {
+  const { user, loading } = useAuth();
+  // Only block on the very first auth check: re-showing the splash later would
+  // unmount NavigationContainer and throw away the current navigation stack.
+  const booted = useRef(false);
+  if (!loading) booted.current = true;
+
+  if (!booted.current) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <RootStackNavigator initialRouteName={user ? 'Main' : 'Onboarding'} />
+      <StatusBar style="auto" />
+    </NavigationContainer>
+  );
+};
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -38,10 +61,7 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <AppProvider>
-          <NavigationContainer>
-            <RootStackNavigator />
-            <StatusBar style="auto" />
-          </NavigationContainer>
+          <RootNavigator />
         </AppProvider>
       </AuthProvider>
     </ToastProvider>

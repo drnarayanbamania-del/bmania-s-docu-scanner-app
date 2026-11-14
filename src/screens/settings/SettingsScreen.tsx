@@ -25,6 +25,7 @@ export const SettingsScreen: React.FC = () => {
       const { error } = await signOut();
       if (error) throw error;
       showToast('Signed out successfully', 'info');
+      navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
     } catch (e) {
       console.error(e);
       showToast('Failed to sign out', 'error');

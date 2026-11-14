@@ -7,6 +7,79 @@ import { localFiles } from '../utils/localFiles';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
 
+// Maps Postgres rows (snake_case) onto the app's Project shape (camelCase).
+const toProject = (row: any) => ({
+  id: row.id,
+  userId: row.user_id,
+  title: row.title,
+  metadata: row.metadata || {},
+  pageCount: row.page_count ?? 0,
+  thumbnailUrl: row.thumbnail_url ?? undefined,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+// Maps Postgres rows onto the app's ScannedPage shape.
+const toScannedPage = (row: any) => ({
+  id: row.id,
+  projectId: row.project_id,
+  imageUri: row.image_uri,
+  originalUri: row.original_uri ?? row.image_uri,
+  processedUri: row.processed_uri ?? undefined,
+  order: row.order ?? 0,
+  cropPoints: row.crop_points ?? undefined,
+  filters: row.filters,
+  createdAt: row.created_at,
+});
+
+// App field names (camelCase) mapped to their Postgres column names.
+const PROJECT_COLUMNS: Record<string, string> = {
+  title: 'title',
+  metadata: 'metadata',
+  thumbnailUrl: 'thumbnail_url',
+  pageCount: 'page_count',
+};
+
+const PAGE_COLUMNS: Record<string, string> = {
+  imageUri: 'image_uri',
+  originalUri: 'original_uri',
+  processedUri: 'processed_uri',
+  cropPoints: 'crop_points',
+  filters: 'filters',
+  order: 'order',
+};
+
+// Web pickers hand back short-lived blob: URLs. They die on reload, so convert
+// them into self-contained data URLs before they are persisted.
+const toPersistentUri = async (uri?: string): Promise<string | undefined> => {
+  if (!uri || Platform.OS !== 'web' || !uri.startsWith('blob:')) return uri;
+  try {
+    const blob = await (await fetch(uri)).blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error ?? new Error('Could not read image'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return uri;
+  }
+};
+
+const toColumnPayload = (
+  updates: Record<string, any>,
+  columns: Record<string, string>
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {};
+  Object.entries(updates).forEach(([key, value]) => {
+    const column = columns[key];
+    if (column && value !== undefined) {
+      payload[column] = value;
+    }
+  });
+  return payload;
+};
+
 class SupabaseService {
   private client: SupabaseClient | null = null;
   private isMock = false;
@@ -21,25 +94,9 @@ class SupabaseService {
     try {
       this.client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
-          storage: {
-            getItem: async (key: string) => {
-              if (key === 'sb-auth-token') {
-                const session = await storage.getSession();
-                return session ? JSON.stringify(session) : null;
-              }
-              return null;
-            },
-            setItem: async (key: string, value: string) => {
-              if (key === 'sb-auth-token') {
-                await storage.setSession(JSON.parse(value));
-              }
-            },
-            removeItem: async (key: string) => {
-              if (key === 'sb-auth-token') {
-                await storage.removeSession();
-              }
-            },
-          },
+          // Let supabase-js own its session key (sb-<ref>-auth-token); a custom
+          // adapter that only recognised 'sb-auth-token' dropped the session on reload.
+          storage: AsyncStorage,
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: Platform.OS === 'web',
@@ -204,7 +261,10 @@ class SupabaseService {
       .insert({ user_id: userId, title, metadata })
       .select()
       .single();
-    return { project: data, error: error ? new Error(error.message) : null };
+    return {
+      project: data ? toProject(data) : null,
+      error: error ? new Error(error.message) : null,
+    };
   }
 
   async getProjects(userId: string): Promise<{ projects: unknown[] | null; error: Error | null }> {
@@ -218,16 +278,7 @@ class SupabaseService {
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false });
-    const projects = data ? data.map((p: any) => ({
-      id: p.id,
-      userId: p.user_id,
-      title: p.title,
-      metadata: p.metadata || {},
-      pageCount: p.page_count ?? 0,
-      thumbnailUrl: p.thumbnail_url,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    })) : null;
+    const projects = data ? data.map(toProject) : null;
     return { projects, error: error ? new Error(error.message) : null };
   }
 
@@ -243,16 +294,7 @@ class SupabaseService {
       .select('*')
       .eq('id', projectId)
       .single();
-    const project = data ? {
-      id: data.id,
-      userId: data.user_id,
-      title: data.title,
-      metadata: data.metadata || {},
-      pageCount: data.page_count ?? 0,
-      thumbnailUrl: data.thumbnail_url,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    } : null;
+    const project = data ? toProject(data) : null;
     return { project, error: error ? new Error(error.message) : null };
   }
 
@@ -262,10 +304,11 @@ class SupabaseService {
       return null;
     }
     const client = this.getClient();
-    const { error } = await client
-      .from('projects')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', projectId);
+    const payload = {
+      ...toColumnPayload(updates, PROJECT_COLUMNS),
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await client.from('projects').update(payload).eq('id', projectId);
     return error ? new Error(error.message) : null;
   }
 
@@ -324,30 +367,28 @@ class SupabaseService {
       return { page: newPage, error: null };
     }
     const client = this.getClient();
+    const [imageUri, originalUri, processedUri] = await Promise.all([
+      toPersistentUri(pageData.imageUri),
+      toPersistentUri(pageData.originalUri),
+      toPersistentUri(pageData.processedUri),
+    ]);
     const { data, error } = await client
       .from('scanned_pages')
       .insert({
         project_id: projectId,
-        image_uri: pageData.imageUri,
-        original_uri: pageData.originalUri,
-        processed_uri: pageData.processedUri,
+        image_uri: imageUri ?? '',
+        original_uri: originalUri,
+        processed_uri: processedUri,
         order: pageData.order ?? 0,
         crop_points: pageData.cropPoints,
         filters: pageData.filters,
       })
       .select()
       .single();
-    const page = data ? {
-      id: data.id,
-      projectId: data.project_id,
-      imageUri: data.image_uri,
-      originalUri: data.original_uri,
-      processedUri: data.processed_uri,
-      order: data.order,
-      cropPoints: data.crop_points,
-      filters: data.filters,
-      createdAt: data.created_at,
-    } : null;
+    const page = data ? toScannedPage(data) : null;
+    if (page) {
+      await this.syncPageCount(client, projectId);
+    }
     return { page, error: error ? new Error(error.message) : null };
   }
 
@@ -362,17 +403,7 @@ class SupabaseService {
       .select('*')
       .eq('project_id', projectId)
       .order('order', { ascending: true });
-    const pages = data ? data.map((p: any) => ({
-      id: p.id,
-      projectId: p.project_id,
-      imageUri: p.image_uri,
-      originalUri: p.original_uri,
-      processedUri: p.processed_uri,
-      order: p.order,
-      cropPoints: p.crop_points,
-      filters: p.filters,
-      createdAt: p.created_at,
-    })) : null;
+    const pages = data ? data.map(toScannedPage) : null;
     return { pages, error: error ? new Error(error.message) : null };
   }
 
@@ -382,7 +413,14 @@ class SupabaseService {
       return null;
     }
     const client = this.getClient();
-    const { error } = await client.from('scanned_pages').update(updates).eq('id', pageId);
+    const payload = toColumnPayload(updates, PAGE_COLUMNS);
+    if (Object.keys(payload).length === 0) return null;
+    for (const column of ['image_uri', 'original_uri', 'processed_uri']) {
+      if (typeof payload[column] === 'string') {
+        payload[column] = await toPersistentUri(payload[column] as string);
+      }
+    }
+    const { error } = await client.from('scanned_pages').update(payload).eq('id', pageId);
     return error ? new Error(error.message) : null;
   }
 
@@ -407,8 +445,28 @@ class SupabaseService {
       return null;
     }
     const client = this.getClient();
+    const { data } = await client
+      .from('scanned_pages')
+      .select('project_id')
+      .eq('id', pageId)
+      .single();
     const { error } = await client.from('scanned_pages').delete().eq('id', pageId);
+    if (!error && data?.project_id) {
+      await this.syncPageCount(client, data.project_id);
+    }
     return error ? new Error(error.message) : null;
+  }
+
+  // Keeps projects.page_count in sync with the pages actually stored in Postgres.
+  private async syncPageCount(client: SupabaseClient, projectId: string): Promise<void> {
+    const { count } = await client
+      .from('scanned_pages')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId);
+    await client
+      .from('projects')
+      .update({ page_count: count ?? 0, updated_at: new Date().toISOString() })
+      .eq('id', projectId);
   }
 }
 

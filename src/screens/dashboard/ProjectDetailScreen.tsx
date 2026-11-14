@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, FlatList, Image, TouchableOpacity, Alert, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, AbsoluteFill } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
@@ -12,11 +12,34 @@ import { ScannedPage } from '../../types';
 
 export const ProjectDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { currentProject, scannedPages, deleteProject, deleteScannedPage, updateScannedPage, reorderPages, addScannedPages, clearCurrentProject } = useApp();
+  const route = useRoute<any>();
+  const projectId: string | undefined = route.params?.projectId;
+  const {
+    currentProject, projects, scannedPages, deleteProject, deleteScannedPage,
+    updateScannedPage, reorderPages, addScannedPages, clearCurrentProject,
+    setCurrentProject, loadScannedPages,
+  } = useApp();
   const { showToast } = useToast();
   const { width: windowWidth } = useWindowDimensions();
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [rotatingPageId, setRotatingPageId] = useState<string | null>(null);
+  const [loadingPages, setLoadingPages] = useState(false);
+
+  // Pages live in the database, so always fetch the ones for this project when it opens.
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    if (currentProject?.id !== projectId) {
+      const match = projects.find(p => p.id === projectId);
+      if (match) setCurrentProject(match);
+    }
+    setLoadingPages(true);
+    loadScannedPages(projectId).finally(() => {
+      if (active) setLoadingPages(false);
+    });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
@@ -243,7 +266,11 @@ export const ProjectDetailScreen: React.FC = () => {
       </View>
 
       {/* Pages list or Empty state */}
-      {projectPages.length === 0 ? (
+      {loadingPages && projectPages.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={Theme.colors.ocean[500]} />
+        </View>
+      ) : projectPages.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="images-outline" size={80} color={Theme.colors.text.muted} />
           <Text style={styles.emptyTitle}>No pages scanned yet</Text>

@@ -156,6 +156,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setState(prev => ({
         ...prev,
         scannedPages: [...prev.scannedPages, ...newPages].sort((a, b) => a.order - b.order),
+        projects: prev.projects.map(p => p.id === projectId
+          ? { ...p, pageCount: (p.pageCount || 0) + newPages.length, updatedAt: new Date().toISOString() }
+          : p),
         currentProject: prev.currentProject?.id === projectId
           ? { ...prev.currentProject, pageCount: prev.currentProject.pageCount + newPages.length }
           : prev.currentProject,
@@ -195,6 +198,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setState(prev => ({
         ...prev,
         scannedPages: prev.scannedPages.filter(p => p.id !== pageId),
+        projects: prev.projects.map(p => p.id === projectId
+          ? { ...p, pageCount: Math.max(0, (p.pageCount || 0) - 1) }
+          : p),
         currentProject: prev.currentProject?.id === projectId
           ? { ...prev.currentProject, pageCount: Math.max(0, prev.currentProject.pageCount - 1) }
           : prev.currentProject,
