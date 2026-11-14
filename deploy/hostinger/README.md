@@ -39,6 +39,17 @@ Open `https://your-domain.com` — the app loads at the domain root, and the APK
 at `https://your-domain.com/bamanias-scanner-<version>.apk` (currently 1.0.2).
 Delete the previous APK from `public_html` so the old download stops working.
 
+## Check what is live
+
+```bash
+deploy/hostinger/verify.sh https://your-domain.com
+```
+
+Checks the shell, every JS chunk it loads, the APK download (against the local
+artifact's size), the SPA fallback that `.htaccess` provides, cache headers on
+hashed assets, and the HTTP-to-HTTPS redirect. Exits non-zero when something is
+wrong.
+
 ## Also required once per domain
 
 - **Supabase → Authentication → URL Configuration**: set *Site URL* to your
