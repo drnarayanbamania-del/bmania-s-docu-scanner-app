@@ -39,14 +39,66 @@ probe() {
   fi
 }
 
+hostport="${base#*://}"
+hostport="${hostport%%/*}"
+host="${hostport%%:*}"
+
+# 0. Does the name resolve at all? A missing DNS record is a completely
+# different fix from a broken server, so report it on its own and stop.
+resolve_host() {
+  local name="$1" found=""
+  if command -v getent >/dev/null 2>&1; then
+    found="$(getent ahosts "$name" 2>/dev/null | awk '{print $1}' | sort -u | head -3)"
+  fi
+  if [ -z "$found" ] && command -v python3 >/dev/null 2>&1; then
+    found="$(python3 - "$name" <<'PY' 2>/dev/null
+import socket, sys
+name = sys.argv[1]
+try:
+    infos = socket.getaddrinfo(name, None)
+except OSError:
+    sys.exit(1)
+print("\n".join(sorted({info[4][0] for info in infos})))
+PY
+    )"
+  fi
+  printf '%s' "$found"
+}
+
+esplain_no_response() {
+  local err
+  err="$(curl -sS -m 15 -o /dev/null "$1" 2>&1 >/dev/null)"
+  case "$err" in
+    *"wrong version number"*) printf 'port speaks plain HTTP, not HTTPS - check the scheme or install the certificate' ;;
+    *certificate*|*SSL*|*TLS*) printf 'TLS handshake failed - certificate missing or not yet issued' ;;
+    *timed*|*Timeout*|*timeout*) printf 'timed out - request never answered' ;;
+    *refused*|*"Failed to connect"*|*Couldn*) printf 'connection refused - nothing is listening on that host and port' ;;
+    *resolve*|*"Could not resolve host"*) printf 'DNS lookup failed' ;;
+    *) printf '%s' "${err:-no response}" ;;
+  esac
+}
+
 say "Checking $base (app $version)"
 say ""
+
+ips="$(resolve_host "$host")"
+if [ -z "$ips" ]; then
+  fail "dns: $host does not resolve (NXDOMAIN, or no A/AAAA record)"
+  say ""
+  say "Nothing else can be checked until the name exists. Fix, then re-run:"
+  say "  1. Add a DNS A record for \"$host\" pointing at this site's server IP."
+  say "  2. Wait for propagation (dig +short $host should print that IP)."
+  say "  3. Issue the certificate in hPanel and enable Force HTTPS."
+  rm -f "$body"
+  exit 1
+fi
+pass "dns: $host -> $(printf '%s' "$ips" | tr '\n' ' ')"
 
 # 1. The app shell.
 read -r code ctype size <<<"$(probe "$base/")"
 case "$code" in
   200) pass "index: HTTP 200, ${ctype%%,*}, ${size}B" ;;
-  000) fail "index: no response (DNS, TLS or server error)" ;;
+  000) fail "index: no response - $(esplain_no_response "$base/")" ;;
   *) fail "index: HTTP $code (expected 200)" ;;
 esac
 

@@ -45,10 +45,12 @@ Delete the previous APK from `public_html` so the old download stops working.
 deploy/hostinger/verify.sh https://your-domain.com
 ```
 
-Checks the shell, every JS chunk it loads, the APK download (against the local
-artifact's size), the SPA fallback that `.htaccess` provides, cache headers on
-hashed assets, and the HTTP-to-HTTPS redirect. Exits non-zero when something is
-wrong.
+Checks DNS first (a missing A record is reported on its own, since nothing else
+can be tested without it), then the shell, every JS chunk it loads, the APK
+download against the local artifact's size, the SPA fallback that `.htaccess`
+provides, cache headers on hashed assets, and the HTTP-to-HTTPS redirect. When a
+request gets no answer it says whether the cause was DNS, TLS, a refused
+connection or a timeout. Exits non-zero when something is wrong.
 
 ## Also required once per domain
 
