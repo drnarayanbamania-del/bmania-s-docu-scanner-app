@@ -66,6 +66,16 @@ Aptoide:
 - [ ] Upload the new APK; the higher `versionCode` updates the existing listing.
 - [ ] Bump the store listing's "What's new" text.
 
+GitHub (optional, one command once `gh auth login` has been run):
+
+```bash
+deploy/github-release.sh          # tag + release + APK asset
+```
+
+The release body comes from `deploy/release-notes/v<version>.md`, so write that
+file as part of the release. Use `--draft` to stage it first, or `--force` to
+replace the asset on an existing release.
+
 ## 5. After publishing
 
 - [ ] Supabase → Authentication → URL Configuration: *Site URL* and *Redirect URLs*
