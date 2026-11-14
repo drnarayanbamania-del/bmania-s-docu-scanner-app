@@ -48,3 +48,6 @@ yarn-error.*
 
 # build artifacts
 /artifacts
+
+# Hostinger FTP credentials
+/deploy/hostinger/ftp.env

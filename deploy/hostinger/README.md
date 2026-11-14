@@ -12,6 +12,21 @@ bamanias-scanner.apk  the signed Android app, downloadable from the same domain
 
 ## Upload
 
+**From the command line** (after the first manual upload has created
+`public_html`):
+
+```bash
+cp deploy/hostinger/ftp.env.example deploy/hostinger/ftp.env   # fill in once
+deploy/hostinger/upload.py --dry-run                           # list what would go
+python3 deploy/hostinger/upload.py --dir dist
+```
+
+`ftp.env` is gitignored; get the account from hPanel → **Files → FTP Accounts**.
+The uploader creates folders, sends hidden files such as `.htaccess`, and skips
+whatever already matches on the server, so re-runs only send what changed.
+
+**By hand**, which is what to do on a brand new domain:
+
 1. hPanel → **Websites → Manage → Files → File Manager**.
 2. Open `public_html` and delete Hostinger's default `default.php` / placeholder page.
 3. Upload the zip and **Extract** it inside `public_html`, then delete the zip.
@@ -21,7 +36,8 @@ bamanias-scanner.apk  the signed Android app, downloadable from the same domain
    **Force HTTPS**.
 
 Open `https://your-domain.com` — the app loads at the domain root, and the APK is
-at `https://your-domain.com/bamanias-scanner-<version>.apk` (currently 1.0.1).
+at `https://your-domain.com/bamanias-scanner-<version>.apk` (currently 1.0.2).
+Delete the previous APK from `public_html` so the old download stops working.
 
 ## Also required once per domain
 
@@ -35,7 +51,7 @@ at `https://your-domain.com/bamanias-scanner-<version>.apk` (currently 1.0.1).
 ## Rebuild after code changes
 
 ```bash
-deploy/hostinger/build.sh artifacts/release/bamanias-scanner-1.0.1.apk
+deploy/hostinger/build.sh artifacts/release/bamanias-scanner-1.0.2.apk
 ```
 
 Without an argument the script still builds the site, just without the APK.
