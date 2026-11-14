@@ -463,6 +463,23 @@ class SupabaseService {
     return target;
   }
 
+  // A failed upload leaves the page inline and therefore device-bound again, so
+  // transient network or storage errors get one retry before giving up.
+  private async uploadWithRetry(
+    client: SupabaseClient,
+    uri: string,
+    userId: string,
+    projectId: string
+  ): Promise<string> {
+    try {
+      return await this.uploadImage(client, uri, userId, projectId);
+    } catch (firstError) {
+      console.warn('Page image upload failed, retrying once:', firstError);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return await this.uploadImage(client, uri, userId, projectId);
+    }
+  }
+
   // Turns whatever the app holds into a bucket path, uploading when needed.
   private async storeImage(
     client: SupabaseClient,
@@ -482,7 +499,7 @@ class SupabaseService {
       }
     }
     try {
-      return await this.uploadImage(client, uri, userId, projectId);
+      return await this.uploadWithRetry(client, uri, userId, projectId);
     } catch (e) {
       console.warn('Could not upload page image to storage, keeping it inline:', e);
       return await toPersistentUri(uri);
