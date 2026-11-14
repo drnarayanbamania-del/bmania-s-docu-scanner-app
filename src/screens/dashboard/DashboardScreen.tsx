@@ -30,6 +30,7 @@ export const DashboardScreen: React.FC = () => {
   const { user, signOut } = useAuth();
   const {
     projects,
+    currentProject,
     createProject,
     setCurrentProject,
     addScannedPages,
@@ -70,6 +71,11 @@ export const DashboardScreen: React.FC = () => {
   // ---------------------------------------------------------------------------
   const [exportDemoVisible, setExportDemoVisible] = useState(false);
   const [demoPages, setDemoPages] = useState<ScannedPage[]>([]);
+
+  // ---------------------------------------------------------------------------
+  // Shared export flow (Compress card and Protect modal open the same modal)
+  // ---------------------------------------------------------------------------
+  const [exportTarget, setExportTarget] = useState<{ pages: ScannedPage[]; title: string } | null>(null);
 
   // Per-project page cache (so we don't re-fetch on every re-render)
   const [projectPagesCache, setProjectPagesCache] = useState<Record<string, any[]>>({});
@@ -124,6 +130,30 @@ export const DashboardScreen: React.FC = () => {
     },
     [projectPagesCache, loadScannedPages]
   );
+
+  /**
+   * Opens the export modal for the document that is most likely wanted: the one
+   * currently open, otherwise the most recently updated document with pages.
+   */
+  const openExportFlow = async () => {
+    const candidates = currentProject
+      ? [currentProject, ...projects.filter(p => p.id !== currentProject.id)]
+      : projects;
+    const target = candidates.find(p => p.pageCount > 0);
+
+    if (!target) {
+      showToast('Create a scan first, then export it here', 'error');
+      return;
+    }
+
+    const pages = await ensureProjectPagesLoaded(target.id);
+    if (pages.length === 0) {
+      showToast('This document has no pages to export', 'error');
+      return;
+    }
+
+    setExportTarget({ pages, title: target.title });
+  };
 
   // ---------------------------------------------------------------------------
   // Merge logic
@@ -376,7 +406,7 @@ export const DashboardScreen: React.FC = () => {
           <Card
             style={styles.utilityCard}
             padding="md"
-            onPress={() => navigation.navigate('Export')}
+            onPress={openExportFlow}
           >
             <View style={[styles.utilityIconBg, { backgroundColor: `${Theme.colors.accent.amber}15` }]}>
               <Ionicons name="layers-outline" size={24} color={Theme.colors.accent.amber} />
@@ -691,7 +721,7 @@ export const DashboardScreen: React.FC = () => {
           style={{ marginTop: Theme.spacing.md }}
           onPress={() => {
             setProtectModalVisible(false);
-            navigation.navigate('Export');
+            openExportFlow();
           }}
         >
           <Ionicons name="open-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
@@ -719,6 +749,14 @@ export const DashboardScreen: React.FC = () => {
         onClose={() => setExportDemoVisible(false)}
         projectPages={demoPages}
         projectTitle="Demo Document"
+      />
+
+      {/* ===== EXPORT MODAL (Compress card / Protect modal) ===== */}
+      <ExportModal
+        visible={!!exportTarget}
+        onClose={() => setExportTarget(null)}
+        projectPages={exportTarget?.pages ?? []}
+        projectTitle={exportTarget?.title ?? ''}
       />
     </View>
   );
