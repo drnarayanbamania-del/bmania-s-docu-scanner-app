@@ -4,6 +4,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storage } from '../utils/storage';
 import { localFiles } from '../utils/localFiles';
+import {
+  recordUploadFallback,
+  recordUploadRecovered,
+  recordUploadRetry,
+  recordUploadStarted,
+} from '../utils/uploadDiagnostics';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
@@ -471,12 +477,16 @@ class SupabaseService {
     userId: string,
     projectId: string
   ): Promise<string> {
+    recordUploadStarted();
     try {
       return await this.uploadImage(client, uri, userId, projectId);
     } catch (firstError) {
+      recordUploadRetry(firstError);
       console.warn('Page image upload failed, retrying once:', firstError);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return await this.uploadImage(client, uri, userId, projectId);
+      const path = await this.uploadImage(client, uri, userId, projectId);
+      recordUploadRecovered();
+      return path;
     }
   }
 
@@ -501,6 +511,7 @@ class SupabaseService {
     try {
       return await this.uploadWithRetry(client, uri, userId, projectId);
     } catch (e) {
+      recordUploadFallback();
       console.warn('Could not upload page image to storage, keeping it inline:', e);
       return await toPersistentUri(uri);
     }

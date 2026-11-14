@@ -7,12 +7,37 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import {
+  getUploadDiagnostics,
+  resetUploadDiagnostics,
+  retryRate,
+  subscribeUploadDiagnostics,
+  uploadDiagnosticsEnabled,
+} from '../../utils/uploadDiagnostics';
+
+// Small label/value pair used by the developer section.
+const DiagnosticMetric: React.FC<{ label: string; value: string; tone?: string }> = ({
+  label,
+  value,
+  tone,
+}) => (
+  <View style={styles.metric}>
+    <Text style={[styles.metricValue, tone ? { color: tone } : null]}>{value}</Text>
+    <Text style={styles.metricLabel}>{label}</Text>
+  </View>
+);
 
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, signOut } = useAuth();
   const { showToast } = useToast();
   const { width: windowWidth } = useWindowDimensions();
+
+  const diagnostics = React.useSyncExternalStore(
+    subscribeUploadDiagnostics,
+    getUploadDiagnostics,
+    getUploadDiagnostics
+  );
 
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
@@ -112,6 +137,57 @@ export const SettingsScreen: React.FC = () => {
             />
           </View>
         </Card>
+
+        {/* Developer Settings: how often uploads needed their retry. */}
+        {uploadDiagnosticsEnabled && (
+          <>
+            <Text style={styles.sectionTitle}>Developer</Text>
+            <Card style={styles.settingsCard} padding="lg">
+              <View style={styles.diagnosticHeader}>
+                <Ionicons name="pulse" size={22} color={Theme.colors.accent.teal} />
+                <Text style={styles.settingLabel}>Page image uploads</Text>
+                <Text style={styles.diagnosticSession}>this session</Text>
+              </View>
+
+              <View style={styles.diagnosticGrid}>
+                <DiagnosticMetric label="Uploads" value={String(diagnostics.uploads)} />
+                <DiagnosticMetric
+                  label="Needed retry"
+                  value={String(diagnostics.retries)}
+                  tone={diagnostics.retries > 0 ? Theme.colors.status.warning : undefined}
+                />
+                <DiagnosticMetric
+                  label="Retry worked"
+                  value={String(diagnostics.recovered)}
+                  tone={diagnostics.recovered > 0 ? Theme.colors.status.success : undefined}
+                />
+                <DiagnosticMetric
+                  label="Fell back inline"
+                  value={String(diagnostics.inlineFallbacks)}
+                  tone={diagnostics.inlineFallbacks > 0 ? Theme.colors.status.error : undefined}
+                />
+              </View>
+
+              <Text style={styles.diagnosticSummary}>
+                {diagnostics.uploads === 0
+                  ? 'No page images uploaded yet this session.'
+                  : `${retryRate(diagnostics).toFixed(0)}% of uploads needed the retry.`}
+              </Text>
+
+              {diagnostics.lastRetry && (
+                <Text style={styles.diagnosticError} numberOfLines={3}>
+                  Last retry at {new Date(diagnostics.lastRetry.at).toLocaleTimeString()}:{' '}
+                  {diagnostics.lastRetry.message}
+                </Text>
+              )}
+
+              <TouchableOpacity style={styles.diagnosticReset} onPress={resetUploadDiagnostics}>
+                <Ionicons name="refresh" size={16} color={Theme.colors.ocean[600]} />
+                <Text style={styles.diagnosticResetText}>Reset counters</Text>
+              </TouchableOpacity>
+            </Card>
+          </>
+        )}
 
         {/* Support Section */}
         <Text style={styles.sectionTitle}>Support & Information</Text>
@@ -217,6 +293,60 @@ const styles = StyleSheet.create({
   settingsCard: {
     marginBottom: Theme.spacing.xl,
     overflow: 'hidden',
+  },
+  diagnosticHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.sm,
+  },
+  diagnosticSession: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.text.muted,
+    marginLeft: 'auto',
+  },
+  diagnosticGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: Theme.spacing.md,
+    gap: Theme.spacing.sm,
+  },
+  metric: {
+    flexBasis: '46%',
+    flexGrow: 1,
+    backgroundColor: Theme.colors.surface.secondary,
+    borderRadius: Theme.borderRadius.md,
+    paddingVertical: Theme.spacing.sm,
+    paddingHorizontal: Theme.spacing.md,
+  },
+  metricValue: {
+    ...Theme.textStyles.h3,
+  },
+  metricLabel: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.text.secondary,
+    marginTop: 2,
+  },
+  diagnosticSummary: {
+    ...Theme.textStyles.bodySmall,
+    color: Theme.colors.text.secondary,
+    marginTop: Theme.spacing.md,
+  },
+  diagnosticError: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.text.muted,
+    marginTop: Theme.spacing.xs,
+  },
+  diagnosticReset: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.xs,
+    alignSelf: 'flex-start',
+    marginTop: Theme.spacing.md,
+  },
+  diagnosticResetText: {
+    ...Theme.textStyles.caption,
+    color: Theme.colors.ocean[600],
+    fontFamily: Theme.typography.fontFamilies.semiBold,
   },
   settingItem: {
     flexDirection: 'row',
