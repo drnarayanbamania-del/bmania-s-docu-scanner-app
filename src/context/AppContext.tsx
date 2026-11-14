@@ -141,9 +141,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addScannedPages = useCallback(async (projectId: string, pages: Omit<ScannedPage, 'id' | 'projectId' | 'createdAt'>[]) => {
     if (!user) return;
     try {
+      // Continue after the highest order already stored for this project. Deriving
+      // the slot from pageCount produced duplicates whenever a page had been
+      // deleted from the middle of the document.
+      const existingPages = await loadScannedPages(projectId);
+      const nextOrder = existingPages.reduce((max, p) => Math.max(max, (p.order ?? -1) + 1), 0);
       const newPages: ScannedPage[] = [];
       for (let i = 0; i < pages.length; i++) {
-        const pageData = { ...pages[i], projectId, order: pages[i].order };
+        const pageData = { ...pages[i], projectId, order: nextOrder + i };
         let result;
         if (AUTH_PROVIDER === 'supabase') {
           result = await supabaseService.createScannedPage(projectId, pageData);
@@ -166,7 +171,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (error) {
       console.error('Failed to add scanned pages:', error);
     }
-  }, [user]);
+  }, [user, loadScannedPages]);
 
   const updateScannedPage = useCallback(async (pageId: string, updates: Partial<ScannedPage>) => {
     try {
