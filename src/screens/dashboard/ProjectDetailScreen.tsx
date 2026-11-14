@@ -41,6 +41,17 @@ export const ProjectDetailScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  // Reaching this screen straight from the Review save leaves no Dashboard under
+  // it, so a plain goBack() had nothing to pop. `Dashboard` is a sibling route in
+  // this stack, so navigating to it either pops back or opens it as the root.
+  const goBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Dashboard');
+  };
+
   const isLargeScreen = Platform.OS === 'web' && windowWidth > 768;
 
   const projectPages = scannedPages
@@ -60,7 +71,7 @@ export const ProjectDetailScreen: React.FC = () => {
       if (currentProject) {
         await deleteProject(currentProject.id);
         clearCurrentProject();
-        navigation.goBack();
+        goBack();
       }
     };
 
@@ -245,7 +256,7 @@ export const ProjectDetailScreen: React.FC = () => {
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyTitle}>No project selected</Text>
-        <Button size="md" onPress={() => navigation.goBack()} style={{ marginTop: Theme.spacing.md }}>
+        <Button size="md" onPress={goBack} style={{ marginTop: Theme.spacing.md }}>
           Go Back
         </Button>
       </View>
@@ -256,7 +267,7 @@ export const ProjectDetailScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, isLargeScreen && styles.largeHeader]}>
-        <Button variant="ghost" size="sm" onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Button variant="ghost" size="sm" onPress={goBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={28} color={Theme.colors.text.secondary} />
         </Button>
         <Text style={styles.headerTitle} numberOfLines={1}>{currentProject.title}</Text>
